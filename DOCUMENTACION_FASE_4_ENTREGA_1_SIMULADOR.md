@@ -146,7 +146,7 @@ flowchart TD
   ]
 }
 ```
-*Interpretación*: Permiso acotado de lectura sobre bucket específico de operaciones. No contiene comodines irrestrictos.
+*Interpretación*: Permiso acotado de lectura sobre bucket específico de operaciones. No contiene patrones de comodines globales excesivamente amplios.
 
 #### 2. `AdministratorAccessSimulated` (Adjunta a `carlos.soporte`)
 ```json
@@ -161,7 +161,7 @@ flowchart TD
   ]
 }
 ```
-*Interpretación*: Permiso irrestricto de administración total (`Action: *`, `Resource: *`). Detona Hallazgo en IAM-003 (C18-01).
+*Interpretación*: Patrón de permisos IAM excesivamente amplio (`Action: *`, `Resource: *`). Detona Hallazgo en IAM-003 (C18-01) estrictamente por el análisis sintáctico de la declaración JSON (`Action: *` y `Resource: *`), no por el nombre de la política ni como una evaluación de gestión de accesos privilegiados del control 8.2 (el cual se encuentra fuera del alcance del sistema).
 
 #### 3. `UpharvenEC2S3ReadPolicy` (Adjunta a `rol.operaciones_valido`)
 ```json
@@ -193,7 +193,7 @@ flowchart TD
 Cada uno de los 10 recursos simulados es sometido a los 8 criterios de evaluación implementados en las 4 reglas del motor algorítmico:
 - **IAM-001 (ISO 5.15)**: C15-01 (Grupos), C15-02 (Confianza de Roles), C15-03 (Acceso a Servicios).
 - **IAM-002 (ISO 5.16)**: C16-01 (Ciclo de Vida/Desaprovisionamiento), C16-02 (Inactividad > 90 días).
-- **IAM-003 (ISO 5.18)**: C18-01 (Permisos Irrestrictos), C18-02 (Alineación con Catálogo).
+- **IAM-003 (ISO 5.18)**: C18-01 (Patrón de permisos IAM excesivamente amplio: Action: *, Resource: *), C18-02 (Alineación con Catálogo).
 - **IAM-004 (ISO 8.5)**: C85-01 (Autenticación Multifactor - MFA).
 
 ### Matriz Detallada de Evaluación
@@ -238,7 +238,7 @@ La ejecución exhaustiva del motor algorítmico sobre los 10 recursos simulados 
 | **IAM-001** | C15-03 (Acceso a servicios autorizados) | 8 | 0 | 2 | 10 |
 | **IAM-002** | C16-01 (Ciclo de vida y desaprovisionamiento) | 8 | 0 | 2 | 10 |
 | **IAM-002** | C16-02 (Gestión de inactividad de credenciales) | 8 | 1 | 1 | 10 |
-| **IAM-003** | C18-01 (Prevención de permisos irrestrictos `*/*`) | 9 | 1 | 0 | 10 |
+| **IAM-003** | C18-01 (Patrón de permisos IAM excesivamente amplio: Action: *, Resource: *) | 9 | 1 | 0 | 10 |
 | **IAM-003** | C18-02 (Alineación con catálogo de privilegios) | 0 | 0 | 10 | 10 |
 | **IAM-004** | C85-01 (Autenticación multifactor obligatoria) | 5 | 1 | 1 | 7 |
 | **TOTAL** | | **36** | **6** | **25** | **67** |
@@ -246,7 +246,7 @@ La ejecución exhaustiva del motor algorítmico sobre los 10 recursos simulados 
 ### 7.3 Desglose de los 6 Hallazgos Detectados
 
 1. **`carlos.soporte` (C15-01)**: Posee el grupo no autorizado `SeguridadTI`, ausente en su perfil `PRF-USR-SOPORTE`.
-2. **`carlos.soporte` (C18-01)**: Posee política `AdministratorAccessSimulated` con comodines totales (`Action: *`, `Resource: *`).
+2. **`carlos.soporte` (C18-01)**: Presenta un patrón de permisos IAM excesivamente amplio (Action: *, Resource: *) identificado al inspeccionar el contenido del documento JSON de la política `AdministratorAccessSimulated`. El hallazgo es detonado estrictamente por la presencia de comodines globales en la estructura de la política y no por el nombre de esta ni como una evaluación de administración privilegiada (control 8.2).
 3. **`usuario.inactivo` (C16-02)**: Cuenta con 120 días de inactividad, superando el umbral corporativo de 90 días.
 4. **`cuenta.sin_mfa` (C85-01)**: Usuario activo con autenticación multifactor deshabilitada (`mfa_enabled: false`).
 5. **`usuario.grupos_discrepantes` (C15-01)**: Grupos asignados (`Finanzas`, `AuditoriaInterna`) totalmente disjuntos con el perfil `PRF-USR-OPERACIONES` (`Operaciones`, `LecturaContratos`).

@@ -109,7 +109,7 @@ def get_simulated_resources() -> List[Dict[str, Any]]:
             }
         },
 
-        # 2. carlos.soporte: Hallazgo en IAM-001 (grupo adicional SeguridadTI) e IAM-003 (permisos irrestrictos */*)
+        # 2. carlos.soporte: Hallazgo en IAM-001 (grupo adicional SeguridadTI) e IAM-003 (patrón de permisos IAM excesivamente amplio: Action: *, Resource: *)
         {
             "id": 2,
             "resource_key": "carlos.soporte",
@@ -510,7 +510,7 @@ def validate_simulated_data_integrity() -> Dict[str, Any]:
         elif rid == 4:
             degraded_resources.append({"resource_key": rkey, "reason": "MFA deshabilitado"})
         elif rid == 2:
-            degraded_resources.append({"resource_key": rkey, "reason": "Permisos irrestrictos (*/*) y grupo fuera de perfil"})
+            degraded_resources.append({"resource_key": rkey, "reason": "Patrón de permisos IAM excesivamente amplio (Action: *, Resource: *) y grupo fuera de perfil"})
         elif rid == 6:
             degraded_resources.append({"resource_key": rkey, "reason": "Grupos asignados discrepantes con perfil de referencia"})
         elif rid == 8:
