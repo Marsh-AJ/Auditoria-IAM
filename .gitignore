@@ -1,0 +1,13 @@
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+*.log
+reports/*
+!reports/.gitkeep
+data/*
+!data/.gitkeep
+
+#hola jajajaajajja

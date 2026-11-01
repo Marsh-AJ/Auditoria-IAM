@@ -1,0 +1,89 @@
+Metadata-Version: 2.4
+Name: auditoria-iam
+Version: 0.1.0
+Summary: Sistema de Auditoría Automatizada IAM basado en ISO/IEC 27001:2022
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: mysql-connector-python>=9.0.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pytest>=8.0.0
+
+# Modelo Automatizado para la Auditoría de Gestión de Identidades y Accesos (IAM)
+## Basado en el Estándar ISO/IEC 27001:2022 para UPHARVEN C.A.
+
+Prototipo funcional inicial del motor de auditoría automatizada desarrollado en **Python 3.13.5** con persistencia en **MySQL Server 9.6**.
+
+---
+
+### 1. Estructura del Proyecto
+
+```text
+sistema/
+├── .env.example                     # Plantilla de variables de entorno seguras
+├── .gitignore                       # Exclusión de archivos sensibles (.env, .venv)
+├── README.md                        # Documentación técnica del proyecto
+├── requirements.txt                 # Dependencias del proyecto
+├── run_audit.py                     # Script de lanzamiento en terminal
+├── data/                            # Directorio para archivos de datos auxiliares
+├── reports/                         # Directorio para exportación de reportes
+├── tests/
+│   └── test_audit_rules.py          # Pruebas unitarias de las reglas de auditoría
+└── src/
+    └── auditoria_iam/
+        ├── application/
+        │   └── cli.py               # Punto de entrada de línea de comandos (CLI)
+        ├── audit/
+        │   ├── engine.py            # Motor orquestador de auditoría transaccional
+        │   ├── models.py            # Dataclasses del dominio (Resource, Finding, etc.)
+        │   └── rules/
+        │       ├── base.py          # Clase abstracta BaseAuditRule
+        │       ├── iam_001_elevated_privileges.py # Control ISO 5.15
+        │       ├── iam_002_inactive_identities.py # Control ISO 5.16
+        │       ├── iam_003_permissions_scope.py   # Control ISO 5.18
+        │       └── iam_004_mfa_authentication.py  # Control ISO 8.5
+        ├── config/
+        │   └── settings.py          # Carga segura de configuración desde .env
+        ├── database/
+        │   ├── connection.py        # Context Manager y manejo de errores MySQL
+        │   └── repository.py        # Operaciones CRUD contra las 5 tablas
+        ├── data_sources/
+        │   ├── simulator/           # Simulador de datos locales
+        │   └── aws/                 # Futura integración Boto3 (Solo Lectura)
+        └── ui/                      # Futura interfaz gráfica PySide6
+```
+
+---
+
+### 2. Configuración y Puesta en Marcha
+
+#### Paso 1: Instalar dependencias en el entorno virtual
+En la terminal de PowerShell (con el entorno `.venv` activo):
+```powershell
+pip install -r requirements.txt
+```
+
+#### Paso 2: Configurar las credenciales de base de datos
+Copia el archivo `.env.example` y renómbralo a `.env`:
+```powershell
+Copy-Item .env.example .env
+```
+Edita `.env` con las credenciales de tu MySQL Server 9.6:
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=auditoria_iam_upharven
+DB_USER=root
+DB_PASSWORD=tu_contraseña_real
+```
+
+#### Paso 3: Ejecutar las pruebas unitarias
+Verifica la lógica de las reglas sin tocar la base de datos:
+```powershell
+pytest tests/ -v
+```
+
+#### Paso 4: Ejecutar el motor de auditoría
+Ejecuta el ciclo de auditoría contra la base de datos MySQL:
+```powershell
+python run_audit.py
+```
