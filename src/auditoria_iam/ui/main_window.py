@@ -71,6 +71,10 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.history_page)   # Índice 3
         self.stacked_widget.addWidget(self.settings_page)  # Índice 4
 
+        # Conectar señales de integración entre páginas
+        self.audit_page.audit_completed.connect(self._on_audit_completed)
+        self.audit_page.navigate_requested.connect(self._on_navigate)
+
         main_layout.addWidget(self.stacked_widget, stretch=1)
 
         # Seleccionar página inicial (Inicio)
@@ -140,4 +144,9 @@ class MainWindow(QMainWindow):
             self.stacked_widget.setCurrentIndex(index)
             if index in self.nav_buttons and not self.nav_buttons[index].isChecked():
                 self.nav_buttons[index].setChecked(True)
+
+    def _on_audit_completed(self, results, resources, summary) -> None:
+        """Transfiere los resultados reales de la auditoría a la vista de resultados."""
+        self.results_page.load_results(results=results, resources=resources, summary=summary)
+
 
