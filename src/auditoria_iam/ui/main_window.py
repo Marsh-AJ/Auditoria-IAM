@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.auditoria_iam.application.audit_service import AuditService
 from src.auditoria_iam.ui.pages import (
     AuditPage,
     HistoryPage,
@@ -57,11 +58,14 @@ class MainWindow(QMainWindow):
         self.stacked_widget = QStackedWidget(self)
         self.stacked_widget.setObjectName("central_stack")
 
+        # Servicio compartido de orquestación y auditoría
+        self.audit_service = AuditService()
+
         # Instanciar las 5 páginas
-        self.home_page = HomePage(self)
-        self.audit_page = AuditPage(self)
-        self.results_page = ResultsPage(self)
-        self.history_page = HistoryPage(self)
+        self.home_page = HomePage(self, audit_service=self.audit_service)
+        self.audit_page = AuditPage(self, audit_service=self.audit_service)
+        self.results_page = ResultsPage(self, audit_service=self.audit_service)
+        self.history_page = HistoryPage(self, audit_service=self.audit_service)
         self.settings_page = SettingsPage(self)
 
         # Añadir al stack
@@ -72,6 +76,8 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.settings_page)  # Índice 4
 
         # Conectar señales de integración entre páginas
+        self.home_page.run_selected.connect(self._on_historical_run_selected)
+        self.home_page.navigate_requested.connect(self._on_navigate)
         self.audit_page.audit_completed.connect(self._on_audit_completed)
         self.audit_page.navigate_requested.connect(self._on_navigate)
         self.history_page.run_selected.connect(self._on_historical_run_selected)
@@ -145,13 +151,17 @@ class MainWindow(QMainWindow):
             self.stacked_widget.setCurrentIndex(index)
             if index in self.nav_buttons and not self.nav_buttons[index].isChecked():
                 self.nav_buttons[index].setChecked(True)
+            # Si se navega a Inicio/Dashboard, refrescar métricas
+            if index == 0:
+                self.home_page.refresh_dashboard()
             # Si se navega a Historial, refrescar la lista de auditorías guardadas
-            if index == 3:
+            elif index == 3:
                 self.history_page.refresh_history()
 
     def _on_audit_completed(self, results, resources, summary) -> None:
-        """Transfiere los resultados reales de la auditoría a la vista de resultados."""
+        """Transfiere los resultados reales de la auditoría a la vista de resultados y refresca dashboard."""
         self.results_page.load_results(results=results, resources=resources, summary=summary)
+        self.home_page.refresh_dashboard()
 
     def _on_historical_run_selected(self, run_id: int) -> None:
         """Recupera los resultados de una auditoría guardada en MySQL y los muestra en ResultsPage."""

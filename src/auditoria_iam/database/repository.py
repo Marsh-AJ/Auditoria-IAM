@@ -520,3 +520,37 @@ def get_evidence_by_audit_result(
     with get_db_cursor(db_name=db_name) as cursor:
         cursor.execute(query, (audit_result_id,))
         return cursor.fetchall()
+
+
+def get_evidence_by_run(
+    audit_run_id: int,
+    db_name: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """Consulta todas las evidencias técnicas registradas en una ejecución de auditoría."""
+    query = """
+        SELECT
+            ae.id,
+            ae.finding_id,
+            ae.audit_result_id,
+            ae.evidence_type,
+            ae.evidence_detail,
+            ae.evidence_reference,
+            ae.captured_at,
+            COALESCE(rf.resource_key, rr.resource_key) AS resource_key,
+            COALESCE(rf.display_name, rr.display_name) AS display_name,
+            COALESCE(rulef.rule_code, ruler.rule_code) AS rule_code,
+            COALESCE(rulef.iso_control, ruler.iso_control) AS iso_control
+        FROM audit_evidence ae
+        LEFT JOIN findings f ON ae.finding_id = f.id
+        LEFT JOIN resources rf ON f.resource_id = rf.id
+        LEFT JOIN audit_rules rulef ON f.audit_rule_id = rulef.id
+        LEFT JOIN audit_results ar ON ae.audit_result_id = ar.id
+        LEFT JOIN resources rr ON ar.resource_id = rr.id
+        LEFT JOIN audit_rules ruler ON ar.audit_rule_id = ruler.id
+        WHERE f.audit_run_id = %s OR ar.audit_run_id = %s
+        ORDER BY ae.id
+    """
+    with get_db_cursor(db_name=db_name) as cursor:
+        cursor.execute(query, (audit_run_id, audit_run_id))
+        return cursor.fetchall()
+

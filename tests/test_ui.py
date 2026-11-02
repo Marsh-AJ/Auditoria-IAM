@@ -26,20 +26,16 @@ from src.auditoria_iam.ui.pages import (
 )
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    """Garantiza una única instancia de QApplication para todas las pruebas de UI."""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    return app
-
-
 @pytest.fixture
 def main_window(qapp):
-    """Crea y entrega una instancia limpia de MainWindow para cada prueba."""
+    """Crea y entrega una instancia limpia de MainWindow para cada prueba con teardown explícito."""
     window = MainWindow()
-    return window
+    yield window
+    try:
+        window.close()
+        window.deleteLater()
+    except Exception:
+        pass
 
 
 def test_ui_modules_import():

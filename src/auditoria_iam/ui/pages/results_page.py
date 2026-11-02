@@ -1,29 +1,34 @@
 """
 Página de Resultados para el Sistema de Auditoría IAM.
-Presenta el resumen cuantitativo de la última auditoría y la visualización tabular
-detallada de los resultados reales generados por el motor de auditoría.
+Presenta el resumen cuantitativo de la última auditoría, la visualización tabular
+detallada de los resultados reales generados por el motor de auditoría y controles
+para la exportación de informes en formatos PDF, Excel (XLSX) y CSV.
 """
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from src.auditoria_iam.application.audit_service import AuditService
 from src.auditoria_iam.audit.models import AuditResult
 
 
 class ResultsPage(QWidget):
-    """Pantalla para la visualización de resultados técnicos de auditoría."""
+    """Pantalla para la visualización de resultados técnicos de auditoría y exportación."""
 
     # Mapeo de reglas a controles ISO/IEC 27001:2022
     RULE_TO_ISO = {
@@ -33,9 +38,18 @@ class ResultsPage(QWidget):
         "IAM-004": "8.5",
     }
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        audit_service: Optional[AuditService] = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("results_page")
+        self._audit_service = audit_service or AuditService()
+        self._current_results: List[AuditResult] = []
+        self._current_resources: List[Dict[str, Any]] = []
+        self._current_summary: Dict[str, int] = {}
+        self._current_run_id: Optional[int] = None
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -88,7 +102,48 @@ class ResultsPage(QWidget):
         banner_layout.addWidget(self.banner_text)
         layout.addWidget(self.info_banner)
 
-        # 4. Estructura de tabla con las columnas requeridas
+        # 4. Barra de acciones de exportación
+        export_layout = QHBoxLayout()
+        export_layout.setSpacing(10)
+
+        lbl_export = QLabel("Exportar informe de esta auditoría:")
+        lbl_export.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
+        export_layout.addWidget(lbl_export)
+
+        self.btn_export_pdf = QPushButton("Exportar PDF 📄")
+        self.btn_export_pdf.setCursor(Qt.PointingHandCursor)
+        self.btn_export_pdf.setEnabled(False)
+        self.btn_export_pdf.setStyleSheet(
+            "background-color: #0284c7; color: #ffffff; border: none; "
+            "border-radius: 6px; padding: 7px 14px; font-weight: bold; font-size: 12px;"
+        )
+        self.btn_export_pdf.clicked.connect(lambda: self.export_results("pdf"))
+        export_layout.addWidget(self.btn_export_pdf)
+
+        self.btn_export_excel = QPushButton("Exportar Excel 📊")
+        self.btn_export_excel.setCursor(Qt.PointingHandCursor)
+        self.btn_export_excel.setEnabled(False)
+        self.btn_export_excel.setStyleSheet(
+            "background-color: #059669; color: #ffffff; border: none; "
+            "border-radius: 6px; padding: 7px 14px; font-weight: bold; font-size: 12px;"
+        )
+        self.btn_export_excel.clicked.connect(lambda: self.export_results("xlsx"))
+        export_layout.addWidget(self.btn_export_excel)
+
+        self.btn_export_csv = QPushButton("Exportar CSV 📑")
+        self.btn_export_csv.setCursor(Qt.PointingHandCursor)
+        self.btn_export_csv.setEnabled(False)
+        self.btn_export_csv.setStyleSheet(
+            "background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; "
+            "border-radius: 6px; padding: 7px 14px; font-weight: 500; font-size: 12px;"
+        )
+        self.btn_export_csv.clicked.connect(lambda: self.export_results("csv"))
+        export_layout.addWidget(self.btn_export_csv)
+
+        export_layout.addStretch()
+        layout.addLayout(export_layout)
+
+        # 5. Estructura de tabla con las columnas requeridas
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(6)
         self.results_table.setHorizontalHeaderLabels([
@@ -145,6 +200,7 @@ class ResultsPage(QWidget):
     ) -> None:
         """
         Carga y visualiza los resultados reales de auditoría en la tabla y contadores de resumen.
+        Habilita los botones de exportación cuando hay datos disponibles.
 
         Args:
             results: Lista de instancias AuditResult generadas por AuditEngine o recuperadas de MySQL.
@@ -152,6 +208,17 @@ class ResultsPage(QWidget):
             summary: Diccionario con total, conforme, hallazgo y no_evaluable.
             run_id: Identificador opcional de la ejecución histórica en MySQL.
         """
+        self._current_results = results
+        self._current_resources = resources
+        self._current_summary = summary
+        self._current_run_id = run_id
+
+        # Habilitar botones de exportación si existen datos
+        has_data = len(results) > 0
+        self.btn_export_pdf.setEnabled(has_data)
+        self.btn_export_excel.setEnabled(has_data)
+        self.btn_export_csv.setEnabled(has_data)
+
         # 1. Actualizar indicadores numéricos de resumen
         self.lbl_total.setText(str(summary.get("total", len(results))))
         self.lbl_conforme.setText(str(summary.get("conforme", 0)))
@@ -220,3 +287,65 @@ class ResultsPage(QWidget):
             self.results_table.setItem(row_idx, 3, item_iso)
             self.results_table.setItem(row_idx, 4, item_status)
             self.results_table.setItem(row_idx, 5, item_justification)
+
+    def export_results(self, format_type: str) -> None:
+        """
+        Abre un diálogo estándar para seleccionar ubicación y genera el archivo
+        de reporte de auditoría en el formato indicado.
+        """
+        if not self._current_results:
+            self.info_banner.setStyleSheet(
+                "background-color: #0f172a; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 12px;"
+            )
+            self.banner_text.setText("⚠️ No hay resultados disponibles para exportar en esta sesión.")
+            return
+
+        fmt = format_type.strip().lower()
+        now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        prefix = f"auditoria_iam_run_{self._current_run_id}" if self._current_run_id is not None else "auditoria_iam_actual"
+
+        if fmt == "pdf":
+            default_name = f"{prefix}_{now_str}.pdf"
+            file_filter = "Documento PDF (*.pdf);;Todos los archivos (*.*)"
+        elif fmt in ("xlsx", "excel"):
+            default_name = f"{prefix}_{now_str}.xlsx"
+            file_filter = "Libro de Microsoft Excel (*.xlsx);;Todos los archivos (*.*)"
+        elif fmt == "csv":
+            default_name = f"{prefix}_{now_str}.csv"
+            file_filter = "Archivo de valores separados por comas (*.csv);;Todos los archivos (*.*)"
+        else:
+            return
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            f"Exportar Informe de Auditoría IAM ({fmt.upper()})",
+            default_name,
+            file_filter,
+        )
+
+        if not filepath:
+            return  # Cancelado por el usuario
+
+        try:
+            saved_path = self._audit_service.export_audit_report(
+                filepath=filepath,
+                format_type=fmt,
+                run_id=self._current_run_id,
+                results=self._current_results,
+                resources=self._current_resources,
+                summary=self._current_summary,
+            )
+            self.info_banner.setStyleSheet(
+                "background-color: #0f172a; border-left: 4px solid #22c55e; border-radius: 6px; padding: 12px;"
+            )
+            self.banner_text.setText(
+                f"✓ Informe {fmt.upper()} exportado exitosamente.\n"
+                f"Ruta: {saved_path}"
+            )
+        except Exception as exc:
+            self.info_banner.setStyleSheet(
+                "background-color: #0f172a; border-left: 4px solid #ef4444; border-radius: 6px; padding: 12px;"
+            )
+            self.banner_text.setText(
+                f"⚠️ Error al exportar el informe {fmt.upper()} ({type(exc).__name__}): {exc}"
+            )
