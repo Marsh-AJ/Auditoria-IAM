@@ -460,7 +460,7 @@ class HomePage(QWidget):
 
         sources_data = [
             ("Simulador Local de Datos", "Dataset determinista diseñado para pruebas y validación académica frente a los 8 criterios de auditoría."),
-            ("Adaptador AWS IAM (Boto3)", "Consulta en vivo de identidades, grupos, roles y políticas de AWS en modo estrictamente de solo lectura mediante el adaptador; su ejecución desde la interfaz se habilitará en la siguiente entrega.")
+            ("Adaptador AWS IAM (Boto3)", "Consulta en vivo de identidades, grupos, roles y políticas de AWS en modo estrictamente de solo lectura mediante el adaptador e integración directa desde la interfaz.")
         ]
 
         for s_title, s_desc in sources_data:

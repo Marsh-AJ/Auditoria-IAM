@@ -50,8 +50,11 @@ class RuleIAM001AccessControl(BaseAuditRule):
 
         # 1. Obtener y validar perfil de acceso de referencia
         profile: Optional[Dict[str, Any]] = None
-        if context is not None and resource_id is not None:
-            profile = context.get_profile_for_resource(resource_id)
+        if context is not None and (resource_id is not None or resource.get("resource_key")):
+            profile = context.get_profile_for_resource(
+                resource_id=resource_id,
+                resource_key=resource.get("resource_key") or resource.get("name")
+            )
 
         # Criterio C15-03: Disponibilidad y validez del perfil de referencia
         if profile is None or str(profile.get("status", "")).lower() != "active":

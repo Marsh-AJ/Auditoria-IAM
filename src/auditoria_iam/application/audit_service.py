@@ -9,6 +9,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.auditoria_iam.audit.engine import AuditEngine
 from src.auditoria_iam.audit.models import AuditContext, AuditResult
+from src.auditoria_iam.data_sources.aws.adapter import AWSIAMDataSource
+from src.auditoria_iam.data_sources.aws.exceptions import (
+    AWSIAMAuthenticationError,
+    AWSIAMConnectionError,
+    AWSIAMDataSourceError,
+    AWSIAMPermissionError,
+)
 from src.auditoria_iam.data_sources.simulator.simulator import (
     IAMSimulatorDataSource,
     get_simulated_audit_context,
@@ -39,8 +46,199 @@ class AuditService:
     y permite la consulta histórica de auditorías previas.
     """
 
-    def __init__(self, engine: Optional[AuditEngine] = None) -> None:
+    def __init__(
+        self,
+        engine: Optional[AuditEngine] = None,
+        aws_data_source: Optional[AWSIAMDataSource] = None,
+    ) -> None:
         self.engine = engine or AuditEngine()
+        self.aws_data_source = aws_data_source
+
+    def _load_aws_audit_context(self, db_name: Optional[str] = None) -> AuditContext:
+        """
+        Recupera el contexto de perfiles de referencia autorizados para recursos AWS desde MySQL.
+        Asocia los perfiles activos tanto por ID numérico como por resource_key (clave textual única).
+
+        Raises:
+            RuntimeError: Si ocurre un fallo en la conexión o consulta con la base de datos MySQL.
+        """
+        try:
+            from src.auditoria_iam.database.repository import (
+                get_active_profiles,
+                get_profile_expected_groups,
+                get_profile_expected_trust_principals,
+                get_resource_active_profile,
+                get_resources,
+            )
+            profiles_list = get_active_profiles(db_name=db_name)
+            if not profiles_list:
+                logger.info("No se encontraron perfiles de acceso activos configurados en MySQL.")
+                return AuditContext()
+
+            profiles: Dict[int, Dict[str, Any]] = {p["id"]: p for p in profiles_list}
+            expected_groups: Dict[int, List[str]] = {}
+            expected_trust: Dict[int, List[Dict[str, Any]]] = {}
+
+            for p_id in profiles:
+                eg = get_profile_expected_groups(p_id, db_name=db_name)
+                expected_groups[p_id] = [g["group_name"] for g in eg if "group_name" in g]
+                et = get_profile_expected_trust_principals(p_id, db_name=db_name)
+                expected_trust[p_id] = et
+
+            db_resources = get_resources(source_type="aws", db_name=db_name)
+            resource_profiles: Dict[int, int] = {}
+            resource_key_profiles: Dict[str, int] = {}
+
+            for r in db_resources:
+                r_id = r.get("id")
+                r_key = r.get("resource_key")
+                if r_id is not None:
+                    active_p = get_resource_active_profile(r_id, db_name=db_name)
+                    if active_p and active_p.get("profile_id"):
+                        p_id = active_p["profile_id"]
+                        resource_profiles[r_id] = p_id
+                        if r_key and isinstance(r_key, str) and r_key.strip():
+                            resource_key_profiles[r_key.strip()] = p_id
+
+            return AuditContext(
+                profiles=profiles,
+                expected_groups=expected_groups,
+                expected_trust_principals=expected_trust,
+                resource_profiles=resource_profiles,
+                resource_key_profiles=resource_key_profiles,
+            )
+        except Exception as exc:
+            logger.error("Error al cargar perfiles de referencia autorizados desde MySQL (%s): %s", type(exc).__name__, exc)
+            raise RuntimeError(
+                f"No se pudo cargar la configuración de perfiles desde la base de datos ({type(exc).__name__}). "
+                "Verifique la disponibilidad y configuración de MySQL."
+            ) from exc
+
+    def run_aws_audit(
+        self,
+        persist: bool = True,
+        db_name: Optional[str] = None,
+        aws_data_source: Optional[AWSIAMDataSource] = None,
+        context: Optional[AuditContext] = None,
+        session: Optional[Any] = None,
+        client: Optional[Any] = None,
+    ) -> Tuple[List[AuditResult], List[Dict[str, Any]], Dict[str, int], Dict[str, Any]]:
+        """
+        Ejecuta la auditoría completa sobre identidades y configuraciones de AWS IAM mediante Boto3 (solo lectura)
+        y opcionalmente persiste la ejecución y sus resultados en MySQL.
+
+        Args:
+            persist: Si es True, intenta registrar la auditoría en MySQL de forma transaccional.
+            db_name: Nombre opcional de la base de datos (para pruebas independientes).
+            aws_data_source: Instancia inyectable del adaptador AWS (para pruebas o configuración avanzada).
+            context: Contexto opcional de perfiles de referencia. Si es None, se carga desde MySQL o se usa contexto vacío.
+            session: Sesión personalizada de boto3.
+            client: Cliente IAM de boto3 inyectable.
+
+        Returns:
+            Tuple con:
+            - results: Lista de instancias AuditResult producidas por el motor.
+            - resources: Lista de recursos evaluados con sus atributos normalizados.
+            - summary: Diccionario resumen con conteos de total, conforme, hallazgo y no_evaluable.
+            - persistence_info: Diccionario con estado de persistencia ('persisted', 'run_id', 'message').
+        """
+        # 1. Obtener adaptador AWS IAM existente
+        if aws_data_source is not None:
+            ds = aws_data_source
+        elif self.aws_data_source is not None:
+            ds = self.aws_data_source
+        else:
+            ds = AWSIAMDataSource(session=session, client=client)
+
+        # 2. Consultar y normalizar recursos de AWS IAM (usuarios y roles)
+        resources = ds.get_resources()
+
+        # 3. Determinar contexto de referencia
+        if context is None:
+            context = self._load_aws_audit_context(db_name=db_name)
+
+        # Mapear los IDs en memoria de los recursos AWS al profile_id según resource_key
+        if context and context.resource_key_profiles:
+            for r in resources:
+                r_key = r.get("resource_key")
+                r_id = r.get("id")
+                if r_key and r_id is not None and r_key in context.resource_key_profiles:
+                    context.resource_profiles[r_id] = context.resource_key_profiles[r_key]
+
+        # 4. Invocar el motor de auditoría centralizado existente
+        results = self.engine.evaluate_all(resources=resources, context=context)
+
+        # 5. Generar resumen cuantitativo
+        summary = {
+            "total": len(results),
+            "conforme": sum(1 for r in results if r.result_status == "Conforme"),
+            "hallazgo": sum(1 for r in results if r.result_status == "Hallazgo"),
+            "no_evaluable": sum(1 for r in results if r.result_status == "No evaluable"),
+        }
+
+        # 6. Persistencia transaccional en MySQL
+        persistence_info: Dict[str, Any] = {
+            "persisted": False,
+            "run_id": None,
+            "message": "",
+        }
+
+        if persist:
+            try:
+                run_id = save_audit_run(
+                    source_type="aws",
+                    results=results,
+                    resources=resources,
+                    summary=summary,
+                    context=context,
+                    db_name=db_name,
+                )
+                persistence_info["persisted"] = True
+                persistence_info["run_id"] = run_id
+                persistence_info["message"] = f"✓ Auditoría AWS guardada exitosamente en MySQL (Ejecución ID #{run_id})."
+            except Exception as exc:
+                logger.warning(f"No fue posible persistir la auditoría AWS en MySQL: {exc}")
+                persistence_info["persisted"] = False
+                err_text = str(exc)
+                if "no existe en la tabla 'resources'" in err_text or "Falta registrar el recurso" in err_text:
+                    persistence_info["message"] = (
+                        f"⚠️ Aviso de persistencia: La auditoría se ejecutó correctamente en memoria, pero no pudo registrarse "
+                        f"en el historial de MySQL porque faltan recursos registrados previamente en el catálogo de MySQL. "
+                        f"({err_text}) "
+                        "Los resultados se conservan íntegros en memoria para consulta y exportación."
+                    )
+                else:
+                    persistence_info["message"] = (
+                        f"⚠️ Aviso de persistencia: No se pudo conectar o registrar en MySQL ({type(exc).__name__}: {err_text}). "
+                        "Los resultados se conservan íntegros en memoria para consulta y exportación."
+                    )
+
+        return results, resources, summary, persistence_info
+
+    def run_audit(
+        self,
+        source_type: str = "simulacion",
+        persist: bool = True,
+        db_name: Optional[str] = None,
+        aws_data_source: Optional[AWSIAMDataSource] = None,
+        context: Optional[AuditContext] = None,
+        session: Optional[Any] = None,
+        client: Optional[Any] = None,
+    ) -> Tuple[List[AuditResult], List[Dict[str, Any]], Dict[str, int], Dict[str, Any]]:
+        """
+        Punto de entrada unificado para la ejecución de auditorías según la fuente de datos seleccionada.
+        """
+        src = source_type.lower().strip()
+        if src in ("aws", "aws_iam", "cloud"):
+            return self.run_aws_audit(
+                persist=persist,
+                db_name=db_name,
+                aws_data_source=aws_data_source,
+                context=context,
+                session=session,
+                client=client,
+            )
+        return self.run_simulated_audit(persist=persist, db_name=db_name)
 
     def run_simulated_audit(
         self, persist: bool = True, db_name: Optional[str] = None

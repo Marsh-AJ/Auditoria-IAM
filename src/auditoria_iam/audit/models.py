@@ -5,7 +5,7 @@ validación de estados permitidos y contexto de perfiles de referencia.
 """
 from dataclasses import dataclass, field
 import json
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Union
 
 # Únicos estados permitidos conforme a la especificación de auditoría ISO/IEC 27001
 VALID_STATUSES: Set[str] = {"Conforme", "Hallazgo", "No evaluable"}
@@ -58,19 +58,40 @@ class AuditContext:
     """
     Contexto de referencia para la ejecución del motor de auditoría.
     Almacena los perfiles de acceso autorizados y sus configuraciones esperadas.
+    Permite la resolución de perfiles tanto por ID numérico como por resource_key.
     """
     profiles: Dict[int, Dict[str, Any]] = field(default_factory=dict)
     expected_groups: Dict[int, List[str]] = field(default_factory=dict)
     expected_trust_principals: Dict[int, List[Dict[str, Any]]] = field(default_factory=dict)
     resource_profiles: Dict[int, int] = field(default_factory=dict)
+    resource_key_profiles: Dict[str, int] = field(default_factory=dict)
 
-    def get_profile_for_resource(self, resource_id: int | str) -> Optional[Dict[str, Any]]:
-        """Obtiene el perfil de acceso activo asignado a un recurso."""
-        try:
-            r_id = int(resource_id)
-        except (ValueError, TypeError):
-            return None
-        profile_id = self.resource_profiles.get(r_id)
+    def get_profile_for_resource(
+        self,
+        resource_id: Union[int, str, None] = None,
+        resource_key: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene el perfil de acceso activo asignado a un recurso.
+        Soporta resolución por ID numérico (resource_id) y/o por clave textual única (resource_key).
+        No asigna perfiles por coincidencias aproximadas; requiere correspondencia unívoca exacta.
+        """
+        profile_id: Optional[int] = None
+
+        # 1. Intentar resolución por ID numérico si está presente en resource_profiles
+        if resource_id is not None:
+            try:
+                r_id = int(resource_id)
+                profile_id = self.resource_profiles.get(r_id)
+            except (ValueError, TypeError):
+                # Si resource_id no es convertible a entero, se evalúa como posible resource_key si no se indicó otra
+                if not resource_key and isinstance(resource_id, str):
+                    resource_key = resource_id
+
+        # 2. Si no se resolvió por ID numérico o si se suministró resource_key, buscar por clave textual exacta
+        if profile_id is None and resource_key and isinstance(resource_key, str):
+            profile_id = self.resource_key_profiles.get(resource_key)
+
         if profile_id is not None:
             return self.profiles.get(profile_id)
         return None

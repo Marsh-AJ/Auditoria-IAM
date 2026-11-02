@@ -19,6 +19,12 @@ from PySide6.QtWidgets import (
 )
 
 from src.auditoria_iam.application.audit_service import AuditService
+from src.auditoria_iam.data_sources.aws.exceptions import (
+    AWSIAMAuthenticationError,
+    AWSIAMConnectionError,
+    AWSIAMDataSourceError,
+    AWSIAMPermissionError,
+)
 
 
 class AuditPage(QWidget):
@@ -146,42 +152,40 @@ class AuditPage(QWidget):
     def _on_source_changed(self, index: int) -> None:
         """Gestiona el cambio de fuente de información seleccionada."""
         source_key = self.source_selector.currentData()
+        self.view_results_button.setVisible(False)
+        self.execute_button.setEnabled(True)
+
         if source_key == "simulador":
-            self.execute_button.setEnabled(True)
             self.status_message.setText(
                 "✓ Fuente 'Simulador de Datos Local' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
                 "la evaluación técnica automatizada de las reglas IAM-001, IAM-002, IAM-003 e IAM-004."
             )
             self.status_message.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.4;")
-        else:
-            self.execute_button.setEnabled(False)
-            self.view_results_button.setVisible(False)
+        elif source_key == "aws":
             self.status_message.setText(
-                "ℹ La integración de auditorías en vivo desde la interfaz para AWS IAM se abordará en una fase posterior. "
-                "El adaptador AWS permanece en modo de solo lectura. Seleccione el simulador para realizar auditorías en esta entrega."
+                "✓ Fuente 'Adaptador AWS IAM Cloud (Boto3)' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
+                "la consulta de solo lectura e inspección de usuarios, grupos, roles y políticas en AWS IAM."
             )
-            self.status_message.setStyleSheet("color: #f59e0b; font-size: 13px; line-height: 1.4;")
+            self.status_message.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.4;")
 
     def _on_execute_clicked(self) -> None:
         """Inicia la ejecución de la auditoría utilizando el motor centralizado."""
         source_key = self.source_selector.currentData()
 
-        # Validación restrictiva de fuente
-        if source_key != "simulador":
-            self.status_message.setText(
-                "ℹ La ejecución con AWS IAM desde la interfaz no está permitida en esta entrega. "
-                "Por favor seleccione el simulador de datos."
-            )
-            self.status_message.setStyleSheet("color: #f59e0b; font-size: 13px; line-height: 1.4;")
-            return
-
         # Deshabilitar botón temporalmente para evitar ejecuciones concurrentes
         self.execute_button.setEnabled(False)
         self.view_results_button.setVisible(False)
-        self.status_message.setText(
-            "⏳ Ejecutando auditoría técnica... Procesando identidades, grupos, roles y políticas JSON "
-            "frente a las reglas IAM-001, IAM-002, IAM-003 e IAM-004..."
-        )
+
+        if source_key == "aws":
+            self.status_message.setText(
+                "⏳ Conectando con AWS IAM mediante Boto3 (solo lectura)... Consultando identidades, "
+                "grupos, roles y políticas JSON para evaluar las reglas IAM-001, IAM-002, IAM-003 e IAM-004..."
+            )
+        else:
+            self.status_message.setText(
+                "⏳ Ejecutando auditoría técnica... Procesando identidades, grupos, roles y políticas JSON "
+                "frente a las reglas IAM-001, IAM-002, IAM-003 e IAM-004..."
+            )
         self.status_message.setStyleSheet("color: #38bdf8; font-size: 13px; line-height: 1.4;")
 
         # Procesar eventos de Qt para actualizar inmediatamente la interfaz
@@ -189,7 +193,11 @@ class AuditPage(QWidget):
 
         try:
             # Invocar la ejecución del motor a través del servicio desacoplado
-            res_tuple = self._audit_service.run_simulated_audit()
+            if source_key == "aws":
+                res_tuple = self._audit_service.run_aws_audit()
+            else:
+                res_tuple = self._audit_service.run_simulated_audit()
+
             if len(res_tuple) == 4:
                 results, resources, summary, persistence_info = res_tuple
             else:
@@ -200,9 +208,10 @@ class AuditPage(QWidget):
             self.audit_completed.emit(results, resources, summary)
 
             persistence_msg = f"\n\n{persistence_info['message']}" if persistence_info.get("message") else ""
+            source_label = "AWS IAM (Nube)" if source_key == "aws" else "Simulador Local"
 
             self.status_message.setText(
-                f"✓ Auditoría finalizada correctamente.\n\n"
+                f"✓ Auditoría finalizada correctamente ({source_label}).\n\n"
                 f"• Total de evaluaciones: {summary['total']}\n"
                 f"• Conforme: {summary['conforme']}\n"
                 f"• Hallazgo: {summary['hallazgo']}\n"
@@ -213,6 +222,35 @@ class AuditPage(QWidget):
             self.status_message.setStyleSheet("color: #22c55e; font-size: 13px; line-height: 1.4; font-weight: 500;")
             self.view_results_button.setVisible(True)
 
+        except AWSIAMAuthenticationError as exc:
+            self.status_message.setText(
+                f"❌ Error de autenticación en AWS: {exc}\n\n"
+                "Verifique que las credenciales estén configuradas mediante variables de entorno "
+                "(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) o el archivo de credenciales de AWS (~/.aws/credentials)."
+            )
+            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+
+        except AWSIAMPermissionError as exc:
+            self.status_message.setText(
+                f"❌ Permisos insuficientes en AWS IAM: {exc}\n\n"
+                "Asegúrese de que el usuario o rol de AWS cuente con permisos de solo lectura "
+                "(acciones iam:List* e iam:Get*)."
+            )
+            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+
+        except AWSIAMConnectionError as exc:
+            self.status_message.setText(
+                f"❌ Error de conexión con AWS IAM: {exc}\n\n"
+                "No fue posible establecer comunicación con el endpoint de AWS. Verifique la conectividad de red."
+            )
+            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+
+        except AWSIAMDataSourceError as exc:
+            self.status_message.setText(
+                f"❌ Error en la fuente de datos AWS IAM: {exc}"
+            )
+            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+
         except Exception as exc:
             self.status_message.setText(
                 f"❌ Error durante la ejecución de la auditoría: {type(exc).__name__} - {str(exc)}"
@@ -221,5 +259,4 @@ class AuditPage(QWidget):
 
         finally:
             # Restaurar estado del botón para permitir nuevas auditorías
-            if self.source_selector.currentData() == "simulador":
-                self.execute_button.setEnabled(True)
+            self.execute_button.setEnabled(True)

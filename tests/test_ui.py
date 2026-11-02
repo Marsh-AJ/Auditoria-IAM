@@ -127,8 +127,8 @@ def test_audit_page_source_selector(main_window):
     assert any("aws" in item.lower() for item in items)
 
 
-def test_audit_page_aws_does_not_allow_execution(main_window):
-    """6. Verifica que AWS IAM no permita ejecutar auditorías reales en esta entrega."""
+def test_audit_page_aws_allows_execution(main_window):
+    """6. Verifica que AWS IAM permita seleccionar y ejecutar auditorías en esta entrega."""
     audit_page = main_window.audit_page
     combo = audit_page.source_selector
 
@@ -138,14 +138,20 @@ def test_audit_page_aws_does_not_allow_execution(main_window):
             combo.setCurrentIndex(i)
             break
 
-    # El botón debe estar deshabilitado para AWS IAM
-    assert not audit_page.execute_button.isEnabled()
-    assert "fase posterior" in audit_page.status_message.text() or "solo lectura" in audit_page.status_message.text()
+    # El botón debe estar habilitado para AWS IAM
+    assert audit_page.execute_button.isEnabled()
+    assert "boto3" in audit_page.status_message.text().lower() or "aws" in audit_page.status_message.text().lower()
 
-    # Asegurar que incluso forzando el método de ejecución, el motor no se ejecuta
-    with patch("src.auditoria_iam.audit.engine.AuditEngine.evaluate_all") as mock_eval:
+    # Asegurar que al hacer clic se ejecuta el flujo de AWS
+    with patch.object(audit_page._audit_service, "run_aws_audit") as mock_aws_audit:
+        mock_aws_audit.return_value = (
+            [],
+            [],
+            {"total": 0, "conforme": 0, "hallazgo": 0, "no_evaluable": 0},
+            {"persisted": False, "run_id": None, "message": ""},
+        )
         audit_page._on_execute_clicked()
-        mock_eval.assert_not_called()
+        mock_aws_audit.assert_called_once()
 
 
 def test_results_page_structure(main_window):
