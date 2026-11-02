@@ -74,6 +74,7 @@ class MainWindow(QMainWindow):
         # Conectar señales de integración entre páginas
         self.audit_page.audit_completed.connect(self._on_audit_completed)
         self.audit_page.navigate_requested.connect(self._on_navigate)
+        self.history_page.run_selected.connect(self._on_historical_run_selected)
 
         main_layout.addWidget(self.stacked_widget, stretch=1)
 
@@ -144,9 +145,26 @@ class MainWindow(QMainWindow):
             self.stacked_widget.setCurrentIndex(index)
             if index in self.nav_buttons and not self.nav_buttons[index].isChecked():
                 self.nav_buttons[index].setChecked(True)
+            # Si se navega a Historial, refrescar la lista de auditorías guardadas
+            if index == 3:
+                self.history_page.refresh_history()
 
     def _on_audit_completed(self, results, resources, summary) -> None:
         """Transfiere los resultados reales de la auditoría a la vista de resultados."""
         self.results_page.load_results(results=results, resources=resources, summary=summary)
+
+    def _on_historical_run_selected(self, run_id: int) -> None:
+        """Recupera los resultados de una auditoría guardada en MySQL y los muestra en ResultsPage."""
+        try:
+            results, resources, summary = self.audit_page._audit_service.get_historical_run_results(run_id)
+            self.results_page.load_results(results=results, resources=resources, summary=summary, run_id=run_id)
+            self._on_navigate(2)
+        except Exception as exc:
+            error_msg = (
+                f"No fue posible recuperar los resultados de la auditoría #{run_id} desde MySQL "
+                f"({type(exc).__name__}). Verifique la conexión con la base de datos."
+            )
+            self.last_historical_error = error_msg
+            self.history_page.show_error_message(error_msg)
 
 

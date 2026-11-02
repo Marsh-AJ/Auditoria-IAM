@@ -6,6 +6,9 @@ from src.auditoria_iam.database.connection import (
     get_db_cursor,
     get_db_transaction
 )
+from src.auditoria_iam.database.persistence import (
+    save_audit_run
+)
 from src.auditoria_iam.database.repository import (
     get_resources,
     get_resource_by_id,
@@ -31,6 +34,7 @@ __all__ = [
     "get_connection",
     "get_db_cursor",
     "get_db_transaction",
+    "save_audit_run",
     "get_resources",
     "get_resource_by_id",
     "get_resource_by_key",

@@ -141,14 +141,16 @@ class ResultsPage(QWidget):
         results: List[AuditResult],
         resources: List[Dict[str, Any]],
         summary: Dict[str, int],
+        run_id: Optional[int] = None,
     ) -> None:
         """
         Carga y visualiza los resultados reales de auditoría en la tabla y contadores de resumen.
 
         Args:
-            results: Lista de instancias AuditResult generadas por AuditEngine.
+            results: Lista de instancias AuditResult generadas por AuditEngine o recuperadas de MySQL.
             resources: Lista de recursos evaluados para enriquecer metadatos de visualización.
             summary: Diccionario con total, conforme, hallazgo y no_evaluable.
+            run_id: Identificador opcional de la ejecución histórica en MySQL.
         """
         # 1. Actualizar indicadores numéricos de resumen
         self.lbl_total.setText(str(summary.get("total", len(results))))
@@ -160,11 +162,18 @@ class ResultsPage(QWidget):
         self.info_banner.setStyleSheet(
             "background-color: #0f172a; border-left: 4px solid #22c55e; border-radius: 6px; padding: 12px;"
         )
-        self.banner_text.setText(
-            f"✓ Mostrando resultados reales de la última ejecución. "
-            f"Se evaluaron {len(resources)} recursos IAM frente a las 4 reglas técnicas "
-            f"con un total de {len(results)} evaluaciones registradas."
-        )
+        if run_id is not None:
+            self.banner_text.setText(
+                f"✓ Mostrando resultados históricos de la ejecución #{run_id} recuperados desde MySQL. "
+                f"Se evaluaron {len(resources)} recursos IAM frente a las reglas técnicas "
+                f"con un total de {len(results)} evaluaciones registradas."
+            )
+        else:
+            self.banner_text.setText(
+                f"✓ Mostrando resultados reales de la última ejecución (Fuente: Simulador). "
+                f"Se evaluaron {len(resources)} recursos IAM frente a las 4 reglas técnicas "
+                f"con un total de {len(results)} evaluaciones registradas."
+            )
 
         # 3. Construir índice de recursos por ID
         resource_index: Dict[Any, Dict[str, Any]] = {

@@ -169,11 +169,18 @@ def test_results_page_structure(main_window):
 
 
 def test_history_page_structure(main_window):
-    """8. Verifica que la pantalla de historial muestre el estado inicial desacoplado de BD."""
+    """8. Verifica que la pantalla de historial muestre la estructura de columnas requerida."""
     history_page = main_window.history_page
     table = history_page.history_table
 
-    assert table.columnCount() == 5
+    assert table.columnCount() == 6
+    headers = [table.horizontalHeaderItem(i).text() for i in range(6)]
+    assert "ID Ejecución" in headers
+    assert "Fecha y Hora" in headers
+    assert "Fuente Utilizada" in headers
+    assert "Estado" in headers
+    assert "Hallazgos Detectados" in headers
+    assert "Resumen de Ejecución" in headers
     assert table.rowCount() == 0
 
 
@@ -279,11 +286,125 @@ def test_multiple_audits_execution_updates_cleanly(main_window):
     assert results_page.lbl_total.text() == "67"
 
 
-def test_no_mysql_interactions_during_audit(main_window):
-    """14. Verifica de forma estricta que no se realicen escrituras ni consultas en MySQL."""
+def test_audit_execution_saves_to_mysql_and_updates_ui(main_window):
+    """14. Verifica que la ejecución de auditoría invoque la persistencia y reporte el ID guardado."""
     audit_page = main_window.audit_page
 
-    with patch("src.auditoria_iam.database.connection.get_connection") as mock_conn:
+    with patch("src.auditoria_iam.application.audit_service.save_audit_run", return_value=42) as mock_save:
         audit_page.execute_button.click()
-        # Jamás se debe haber intentado conectar a la base de datos
-        mock_conn.assert_not_called()
+        mock_save.assert_called_once()
+        status_text = audit_page.status_message.text()
+        assert "Ejecución ID #42" in status_text or "ID #42" in status_text
+
+
+def test_persistence_failure_retains_results_in_memory_and_warns(main_window):
+    """15. Verifica que si MySQL falla, la auditoría conserve los resultados en memoria y emita un aviso."""
+    audit_page = main_window.audit_page
+    results_page = main_window.results_page
+
+    with patch("src.auditoria_iam.application.audit_service.save_audit_run", side_effect=RuntimeError("DB caída")):
+        audit_page.execute_button.click()
+
+        # Comprobar que los resultados en memoria se conservan en la interfaz
+        assert results_page.results_table.rowCount() == 67
+        # Comprobar que se presentó el mensaje de advertencia sobre MySQL
+        status_text = audit_page.status_message.text()
+        assert "Aviso de persistencia" in status_text
+        assert "memoria" in status_text
+
+
+def test_history_page_loads_and_displays_runs_from_mysql(main_window):
+    """16. Verifica que la pantalla de historial cargue y muestre ejecuciones recuperadas de MySQL."""
+    history_page = main_window.history_page
+
+    mock_runs = [
+        {
+            "id": 1,
+            "execution_date": "2026-11-01 10:00:00",
+            "source_type": "simulacion",
+            "status": "completada",
+            "total_findings": 6,
+            "summary": "Total: 67 | Conforme: 36 | Hallazgo: 6 | No evaluable: 25",
+        },
+        {
+            "id": 2,
+            "execution_date": "2026-11-01 11:30:00",
+            "source_type": "simulacion",
+            "status": "completada",
+            "total_findings": 3,
+            "summary": "Total: 67 | Conforme: 40 | Hallazgo: 3 | No evaluable: 24",
+        },
+    ]
+
+    with patch.object(history_page._audit_service, "get_audit_history", return_value=mock_runs):
+        history_page.refresh_history()
+
+        table = history_page.history_table
+        assert table.rowCount() == 2
+        assert table.item(0, 0).text() == "#1"
+        assert table.item(1, 0).text() == "#2"
+        assert "Se encontraron 2 ejecuciones" in history_page.banner_text.text()
+
+
+def test_history_page_select_run_loads_historical_results_in_results_page(main_window):
+    """17. Verifica que al seleccionar una auditoría del historial, se consulten sus resultados en ResultsPage."""
+    history_page = main_window.history_page
+    results_page = main_window.results_page
+
+    mock_runs = [
+        {"id": 99, "execution_date": "2026-11-01 12:00:00", "source_type": "simulacion", "status": "completada", "total_findings": 1, "summary": "Test run"},
+    ]
+
+    from src.auditoria_iam.audit.models import AuditResult
+    mock_results = [
+        AuditResult("IAM-001", "C15-01", 1, "Conforme", "Histórico Conforme 1"),
+        AuditResult("IAM-003", "C18-01", 2, "Hallazgo", "Histórico Hallazgo 1"),
+    ]
+    mock_resources = [{"id": 1, "resource_key": "user.test1"}, {"id": 2, "resource_key": "user.test2"}]
+    mock_summary = {"total": 2, "conforme": 1, "hallazgo": 1, "no_evaluable": 0}
+
+    with patch.object(history_page._audit_service, "get_audit_history", return_value=mock_runs), \
+         patch.object(main_window.audit_page._audit_service, "get_historical_run_results", return_value=(mock_results, mock_resources, mock_summary)):
+
+        history_page.refresh_history()
+        history_page.history_table.selectRow(0)
+        assert history_page.btn_view_results.isEnabled()
+
+        # Pulsar ver resultados
+        history_page.btn_view_results.click()
+
+        # Debe haber navegado a ResultsPage (índice 2)
+        assert main_window.stacked_widget.currentIndex() == 2
+        assert results_page.results_table.rowCount() == 2
+        assert results_page.lbl_total.text() == "2"
+        assert results_page.lbl_hallazgo.text() == "1"
+        assert "ejecución #99" in results_page.banner_text.text()
+
+
+def test_history_page_error_retrieving_historical_run_communicated_through_ui(main_window):
+    """18. Verifica que si falla la consulta de resultados históricos, se comunique en la UI sin cerrar la aplicación."""
+    history_page = main_window.history_page
+
+    mock_runs = [
+        {"id": 404, "execution_date": "2026-11-01 12:00:00", "source_type": "simulacion", "status": "completada", "total_findings": 1, "summary": "Test run"},
+    ]
+
+    with patch.object(history_page._audit_service, "get_audit_history", return_value=mock_runs), \
+         patch.object(main_window.audit_page._audit_service, "get_historical_run_results", side_effect=RuntimeError("Error de lectura en MySQL")):
+
+        history_page.refresh_history()
+        history_page.history_table.selectRow(0)
+        assert history_page.btn_view_results.isEnabled()
+
+        # Pulsar ver resultados (producirá error controlado)
+        history_page.btn_view_results.click()
+
+        # Comprobar que no se produjo crash y que el error quedó registrado
+        assert hasattr(main_window, "last_historical_error")
+        assert "No fue posible recuperar los resultados de la auditoría #404" in main_window.last_historical_error
+        assert "RuntimeError" in main_window.last_historical_error
+
+        # Comprobar que el banner de HistoryPage muestra el mensaje visible
+        assert "No fue posible recuperar los resultados de la auditoría #404" in history_page.banner_text.text()
+
+

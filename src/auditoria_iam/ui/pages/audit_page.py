@@ -189,17 +189,25 @@ class AuditPage(QWidget):
 
         try:
             # Invocar la ejecución del motor a través del servicio desacoplado
-            results, resources, summary = self._audit_service.run_simulated_audit()
+            res_tuple = self._audit_service.run_simulated_audit()
+            if len(res_tuple) == 4:
+                results, resources, summary, persistence_info = res_tuple
+            else:
+                results, resources, summary = res_tuple[:3]
+                persistence_info = {"persisted": False, "run_id": None, "message": ""}
 
             # Emitir señal con los resultados reales
             self.audit_completed.emit(results, resources, summary)
+
+            persistence_msg = f"\n\n{persistence_info['message']}" if persistence_info.get("message") else ""
 
             self.status_message.setText(
                 f"✓ Auditoría finalizada correctamente.\n\n"
                 f"• Total de evaluaciones: {summary['total']}\n"
                 f"• Conforme: {summary['conforme']}\n"
                 f"• Hallazgo: {summary['hallazgo']}\n"
-                f"• No evaluable: {summary['no_evaluable']}\n\n"
+                f"• No evaluable: {summary['no_evaluable']}"
+                f"{persistence_msg}\n\n"
                 f"Los resultados detallados se encuentran disponibles en la sección 'Resultados'."
             )
             self.status_message.setStyleSheet("color: #22c55e; font-size: 13px; line-height: 1.4; font-weight: 500;")
