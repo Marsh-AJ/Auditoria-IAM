@@ -352,7 +352,7 @@ def get_audit_runs(limit: int = 50, db_name: Optional[str] = None) -> List[Dict[
             summary,
             created_at
         FROM audit_runs
-        ORDER BY id DESC
+        ORDER BY execution_date DESC, id DESC
         LIMIT %s
     """
     with get_db_cursor(db_name=db_name) as cursor:

@@ -166,7 +166,7 @@ class MainWindow(QMainWindow):
     def _on_historical_run_selected(self, run_id: int) -> None:
         """Recupera los resultados de una auditoría guardada en MySQL y los muestra en ResultsPage."""
         try:
-            results, resources, summary = self.audit_page._audit_service.get_historical_run_results(run_id)
+            results, resources, summary = self.audit_service.get_historical_run_results(run_id)
             self.results_page.load_results(results=results, resources=resources, summary=summary, run_id=run_id)
             self._on_navigate(2)
         except Exception as exc:
