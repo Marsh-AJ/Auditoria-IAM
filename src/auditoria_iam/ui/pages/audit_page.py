@@ -1,11 +1,11 @@
 """
 Página de Ejecución de Auditoría para el Sistema de Auditoría IAM.
 Permite seleccionar la fuente de datos (Simulador / AWS IAM) y ejecutar
-procesos de auditoría reales a través del motor algorítmico existente.
+procesos de auditoría reales mediante tarjetas ejecutivas limpias.
 """
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -25,14 +25,13 @@ from src.auditoria_iam.data_sources.aws.exceptions import (
     AWSIAMDataSourceError,
     AWSIAMPermissionError,
 )
+from src.auditoria_iam.ui.icons import create_icon_badge, render_svg_icon
 
 
 class AuditPage(QWidget):
     """Pantalla para la configuración y lanzamiento de procesos de auditoría."""
 
-    # Señal emitida al completar exitosamente una auditoría: (results, resources, summary)
     audit_completed = Signal(list, list, dict)
-    # Señal para solicitar navegación a otra vista por índice (ej. resultados = 2)
     navigate_requested = Signal(int)
 
     def __init__(
@@ -51,96 +50,194 @@ class AuditPage(QWidget):
         scroll_area.setFrameShape(QFrame.NoFrame)
 
         content_widget = QWidget()
+        content_widget.setObjectName("audit_canvas")
+        content_widget.setStyleSheet("QWidget#audit_canvas { background-color: #F5F7FA; }")
         layout = QVBoxLayout(content_widget)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(24)
+        layout.setContentsMargins(28, 24, 28, 30)
+        layout.setSpacing(18)
 
         # 1. Encabezado de la página
-        title = QLabel("Nueva auditoría")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #f8fafc;")
+        title_col = QVBoxLayout()
+        title_col.setSpacing(3)
+
+        title = QLabel("Ejecutar Auditoría IAM")
+        title.setProperty("class", "page_title")
 
         subtitle = QLabel(
-            "Seleccione los parámetros de origen para iniciar la evaluación automatizada "
-            "de controles ISO/IEC 27001:2022 mediante el motor algorítmico central."
+            "Seleccione el origen de identidades para iniciar la evaluación automatizada de controles ISO/IEC 27001:2022."
         )
-        subtitle.setStyleSheet("font-size: 13px; color: #94a3b8;")
+        subtitle.setProperty("class", "page_subtitle")
+        subtitle.setWordWrap(True)
 
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        title_col.addWidget(title)
+        title_col.addWidget(subtitle)
+        layout.addLayout(title_col)
 
-        # 2. Tarjeta de configuración de ejecución
+        # 2. Tarjeta principal de configuración de ejecución
         config_card = QFrame()
         config_card.setProperty("class", "card")
-        config_card.setStyleSheet(
-            "background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px;"
-        )
         card_layout = QVBoxLayout(config_card)
-        card_layout.setSpacing(16)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
 
-        # Selector de fuente
-        source_label = QLabel("Fuente de Información:")
-        source_label.setStyleSheet("font-size: 13px; font-weight: 600; color: #e2e8f0;")
+        # Cabecera de la tarjeta
+        cfg_header = QWidget()
+        cfg_h_layout = QHBoxLayout(cfg_header)
+        cfg_h_layout.setContentsMargins(22, 18, 22, 14)
+
+        cfg_text_col = QVBoxLayout()
+        cfg_text_col.setSpacing(2)
+        cfg_title = QLabel("Parámetros de Origen")
+        cfg_title.setProperty("class", "card_header_title")
+        cfg_sub = QLabel("La inspección se realiza estrictamente en modo de solo lectura sin alterar recursos.")
+        cfg_sub.setStyleSheet("color: #64748B; font-size: 12px;")
+        cfg_text_col.addWidget(cfg_title)
+        cfg_text_col.addWidget(cfg_sub)
+
+        cfg_icon = create_icon_badge(
+            "play_bolt",
+            fg_color="#294F78",
+            bg_color="#EEF4FF",
+            border_color="#DBEAFE",
+            box_size=36,
+            icon_size=17,
+            radius=9,
+        )
+        cfg_h_layout.addLayout(cfg_text_col, stretch=1)
+        cfg_h_layout.addWidget(cfg_icon)
+        card_layout.addWidget(cfg_header)
+
+        line1 = QFrame()
+        line1.setFixedHeight(1)
+        line1.setStyleSheet("background-color: #F1F5F9; border: none;")
+        card_layout.addWidget(line1)
+
+        # Cuerpo del formulario
+        cfg_body = QWidget()
+        cfg_b_layout = QVBoxLayout(cfg_body)
+        cfg_b_layout.setContentsMargins(22, 18, 22, 18)
+        cfg_b_layout.setSpacing(8)
+
+        source_label = QLabel("FUENTE DE INFORMACIÓN")
+        source_label.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748B; letter-spacing: 0.6px;")
 
         self.source_selector = QComboBox()
-        self.source_selector.addItem("Simulador de Datos Local (Fase 4 - Entrega 1)", "simulador")
-        self.source_selector.addItem("Adaptador AWS IAM Cloud - Boto3 (Fase 4 - Entrega 2)", "aws")
-        self.source_selector.setStyleSheet(
-            "background-color: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #f8fafc;"
-        )
+        self.source_selector.addItem("Simulador de Datos Local — Entorno determinista de validación", "simulador")
+        self.source_selector.addItem("Adaptador AWS IAM Cloud (Boto3) — Consulta en vivo de solo lectura", "aws")
         self.source_selector.currentIndexChanged.connect(self._on_source_changed)
 
-        card_layout.addWidget(source_label)
-        card_layout.addWidget(self.source_selector)
+        cfg_b_layout.addWidget(source_label)
+        cfg_b_layout.addWidget(self.source_selector)
+        card_layout.addWidget(cfg_body)
 
-        # Botón de ejecución y botón de ver resultados
-        btn_layout = QHBoxLayout()
-        self.execute_button = QPushButton("Ejecutar auditoría")
+        line2 = QFrame()
+        line2.setFixedHeight(1)
+        line2.setStyleSheet("background-color: #F1F5F9; border: none;")
+        card_layout.addWidget(line2)
+
+        # Pie de acciones de la tarjeta
+        cfg_footer = QWidget()
+        btn_layout = QHBoxLayout(cfg_footer)
+        btn_layout.setContentsMargins(22, 14, 22, 14)
+        btn_layout.setSpacing(12)
+
+        self.execute_button = QPushButton("  Ejecutar auditoría")
         self.execute_button.setObjectName("execute_button")
+        self.execute_button.setProperty("class", "primary_button")
+        self.execute_button.setIcon(render_svg_icon("play_bolt", color="#FFFFFF", disabled_color="#94A3B8", size=15))
+        self.execute_button.setIconSize(QSize(15, 15))
         self.execute_button.setCursor(Qt.PointingHandCursor)
-        self.execute_button.setStyleSheet(
-            "background-color: #0284c7; color: #ffffff; border: none; border-radius: 6px; "
-            "padding: 10px 24px; font-weight: bold; font-size: 13px;"
-        )
         self.execute_button.clicked.connect(self._on_execute_clicked)
 
-        self.view_results_button = QPushButton("Ver resultados detallados →")
+        self.view_results_button = QPushButton("Ver resultados detallados  →")
+        self.view_results_button.setProperty("class", "secondary_button")
         self.view_results_button.setCursor(Qt.PointingHandCursor)
         self.view_results_button.setVisible(False)
-        self.view_results_button.setStyleSheet(
-            "background-color: #334155; color: #38bdf8; border: 1px solid #38bdf8; "
-            "border-radius: 6px; padding: 10px 18px; font-weight: 600; font-size: 13px;"
-        )
         self.view_results_button.clicked.connect(lambda: self.navigate_requested.emit(2))
 
         btn_layout.addWidget(self.execute_button)
         btn_layout.addWidget(self.view_results_button)
         btn_layout.addStretch()
-        card_layout.addLayout(btn_layout)
+        card_layout.addWidget(cfg_footer)
 
         layout.addWidget(config_card)
 
-        # 3. Panel de Estado y Mensajes de Operación
-        status_box = QFrame()
-        status_box.setStyleSheet(
-            "background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 16px;"
-        )
-        status_layout = QVBoxLayout(status_box)
-        status_layout.setSpacing(8)
+        # 3. Tarjeta de Estado de la Operación y Alcance
+        status_card = QFrame()
+        status_card.setProperty("class", "card")
+        status_card_layout = QVBoxLayout(status_card)
+        status_card_layout.setContentsMargins(0, 0, 0, 0)
+        status_card_layout.setSpacing(0)
 
-        status_header = QLabel("Estado de la Operación")
-        status_header.setStyleSheet("font-size: 13px; font-weight: 600; color: #38bdf8;")
+        st_header = QWidget()
+        st_h_layout = QHBoxLayout(st_header)
+        st_h_layout.setContentsMargins(22, 16, 22, 12)
+
+        status_header_lbl = QLabel("Estado de la Operación")
+        status_header_lbl.setProperty("class", "card_header_title")
+        st_icon = create_icon_badge(
+            "shield_check",
+            fg_color="#16845B",
+            bg_color="#ECFDF5",
+            border_color="#D1FAE5",
+            box_size=34,
+            icon_size=16,
+            radius=8,
+        )
+        st_h_layout.addWidget(status_header_lbl, stretch=1)
+        st_h_layout.addWidget(st_icon)
+        status_card_layout.addWidget(st_header)
+
+        line3 = QFrame()
+        line3.setFixedHeight(1)
+        line3.setStyleSheet("background-color: #F1F5F9; border: none;")
+        status_card_layout.addWidget(line3)
+
+        st_body = QWidget()
+        st_b_layout = QVBoxLayout(st_body)
+        st_b_layout.setContentsMargins(22, 16, 22, 18)
 
         self.status_message = QLabel(
-            "✓ Fuente 'Simulador de Datos Local' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
+            "✓  Fuente 'Simulador de Datos Local' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
             "la evaluación técnica automatizada de las reglas IAM-001, IAM-002, IAM-003 e IAM-004."
         )
         self.status_message.setWordWrap(True)
-        self.status_message.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.4;")
+        self.status_message.setStyleSheet("color: #334155; font-size: 13px; line-height: 1.45;")
+        st_b_layout.addWidget(self.status_message)
+        status_card_layout.addWidget(st_body)
 
-        status_layout.addWidget(status_header)
-        status_layout.addWidget(self.status_message)
-        layout.addWidget(status_box)
+        line4 = QFrame()
+        line4.setFixedHeight(1)
+        line4.setStyleSheet("background-color: #F1F5F9; border: none;")
+        status_card_layout.addWidget(line4)
 
+        # Franja inferior informativa de controles activos
+        st_footer = QWidget()
+        st_f_layout = QHBoxLayout(st_footer)
+        st_f_layout.setContentsMargins(22, 10, 22, 12)
+        st_f_layout.setSpacing(8)
+
+        lbl_scope = QLabel("Alcance activo:")
+        lbl_scope.setStyleSheet("color: #64748B; font-size: 11.5px; font-weight: 600;")
+        st_f_layout.addWidget(lbl_scope)
+
+        for chip_txt in (
+            "IAM-001 · ISO 5.15",
+            "IAM-002 · ISO 5.16",
+            "IAM-003 · ISO 5.18",
+            "IAM-004 · ISO 8.5",
+        ):
+            chip = QLabel(chip_txt)
+            chip.setStyleSheet(
+                "background-color: #F8FAFC; color: #475569; border: 1px solid #E2E8F0; "
+                "border-radius: 6px; padding: 3px 9px; font-size: 11px; font-weight: 600;"
+            )
+            st_f_layout.addWidget(chip)
+
+        st_f_layout.addStretch()
+        status_card_layout.addWidget(st_footer)
+
+        layout.addWidget(status_card)
         layout.addStretch()
 
         scroll_area.setWidget(content_widget)
@@ -150,49 +247,44 @@ class AuditPage(QWidget):
         main_layout.addWidget(scroll_area)
 
     def _on_source_changed(self, index: int) -> None:
-        """Gestiona el cambio de fuente de información seleccionada."""
         source_key = self.source_selector.currentData()
         self.view_results_button.setVisible(False)
         self.execute_button.setEnabled(True)
 
         if source_key == "simulador":
             self.status_message.setText(
-                "✓ Fuente 'Simulador de Datos Local' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
+                "✓  Fuente 'Simulador de Datos Local' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
                 "la evaluación técnica automatizada de las reglas IAM-001, IAM-002, IAM-003 e IAM-004."
             )
-            self.status_message.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.4;")
+            self.status_message.setStyleSheet("color: #334155; font-size: 13px; line-height: 1.45;")
         elif source_key == "aws":
             self.status_message.setText(
-                "✓ Fuente 'Adaptador AWS IAM Cloud (Boto3)' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
+                "✓  Fuente 'Adaptador AWS IAM Cloud (Boto3)' seleccionada. Pulse 'Ejecutar auditoría' para iniciar "
                 "la consulta de solo lectura e inspección de usuarios, grupos, roles y políticas en AWS IAM."
             )
-            self.status_message.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.4;")
+            self.status_message.setStyleSheet("color: #334155; font-size: 13px; line-height: 1.45;")
 
     def _on_execute_clicked(self) -> None:
-        """Inicia la ejecución de la auditoría utilizando el motor centralizado."""
         source_key = self.source_selector.currentData()
 
-        # Deshabilitar botón temporalmente para evitar ejecuciones concurrentes
         self.execute_button.setEnabled(False)
         self.view_results_button.setVisible(False)
 
         if source_key == "aws":
             self.status_message.setText(
-                "⏳ Conectando con AWS IAM mediante Boto3 (solo lectura)... Consultando identidades, "
+                "⏳  Conectando con AWS IAM mediante Boto3 (solo lectura)... Consultando identidades, "
                 "grupos, roles y políticas JSON para evaluar las reglas IAM-001, IAM-002, IAM-003 e IAM-004..."
             )
         else:
             self.status_message.setText(
-                "⏳ Ejecutando auditoría técnica... Procesando identidades, grupos, roles y políticas JSON "
+                "⏳  Ejecutando auditoría técnica... Procesando identidades, grupos, roles y políticas JSON "
                 "frente a las reglas IAM-001, IAM-002, IAM-003 e IAM-004..."
             )
-        self.status_message.setStyleSheet("color: #38bdf8; font-size: 13px; line-height: 1.4;")
+        self.status_message.setStyleSheet("color: #294F78; font-size: 13px; line-height: 1.45; font-weight: 600;")
 
-        # Procesar eventos de Qt para actualizar inmediatamente la interfaz
         QApplication.processEvents()
 
         try:
-            # Invocar la ejecución del motor a través del servicio desacoplado
             if source_key == "aws":
                 res_tuple = self._audit_service.run_aws_audit()
             else:
@@ -204,7 +296,6 @@ class AuditPage(QWidget):
                 results, resources, summary = res_tuple[:3]
                 persistence_info = {"persisted": False, "run_id": None, "message": ""}
 
-            # Emitir señal con los resultados reales
             self.audit_completed.emit(results, resources, summary)
 
             persistence_msg = f"\n\n{persistence_info['message']}" if persistence_info.get("message") else ""
@@ -219,16 +310,16 @@ class AuditPage(QWidget):
                 f"{persistence_msg}\n\n"
                 f"Los resultados detallados se encuentran disponibles en la sección 'Resultados'."
             )
-            self.status_message.setStyleSheet("color: #22c55e; font-size: 13px; line-height: 1.4; font-weight: 500;")
+            self.status_message.setStyleSheet("color: #16845B; font-size: 13px; line-height: 1.45; font-weight: 600;")
             self.view_results_button.setVisible(True)
 
         except AWSIAMAuthenticationError as exc:
             self.status_message.setText(
                 f"❌ Error de autenticación en AWS: {exc}\n\n"
                 "Verifique que las credenciales estén configuradas mediante variables de entorno "
-                "(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) o el archivo de credenciales de AWS (~/.aws/credentials)."
+                "(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) o el archivo ~/.aws/credentials."
             )
-            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+            self.status_message.setStyleSheet("color: #D64545; font-size: 13px; line-height: 1.45; font-weight: 600;")
 
         except AWSIAMPermissionError as exc:
             self.status_message.setText(
@@ -236,27 +327,24 @@ class AuditPage(QWidget):
                 "Asegúrese de que el usuario o rol de AWS cuente con permisos de solo lectura "
                 "(acciones iam:List* e iam:Get*)."
             )
-            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+            self.status_message.setStyleSheet("color: #D64545; font-size: 13px; line-height: 1.45; font-weight: 600;")
 
         except AWSIAMConnectionError as exc:
             self.status_message.setText(
                 f"❌ Error de conexión con AWS IAM: {exc}\n\n"
                 "No fue posible establecer comunicación con el endpoint de AWS. Verifique la conectividad de red."
             )
-            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+            self.status_message.setStyleSheet("color: #D64545; font-size: 13px; line-height: 1.45; font-weight: 600;")
 
         except AWSIAMDataSourceError as exc:
-            self.status_message.setText(
-                f"❌ Error en la fuente de datos AWS IAM: {exc}"
-            )
-            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+            self.status_message.setText(f"❌ Error en la fuente de datos AWS IAM: {exc}")
+            self.status_message.setStyleSheet("color: #D64545; font-size: 13px; line-height: 1.45; font-weight: 600;")
 
         except Exception as exc:
             self.status_message.setText(
                 f"❌ Error durante la ejecución de la auditoría: {type(exc).__name__} - {str(exc)}"
             )
-            self.status_message.setStyleSheet("color: #ef4444; font-size: 13px; line-height: 1.4; font-weight: 500;")
+            self.status_message.setStyleSheet("color: #D64545; font-size: 13px; line-height: 1.45; font-weight: 600;")
 
         finally:
-            # Restaurar estado del botón para permitir nuevas auditorías
             self.execute_button.setEnabled(True)

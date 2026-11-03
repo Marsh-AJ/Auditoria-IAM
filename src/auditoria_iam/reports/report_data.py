@@ -108,6 +108,8 @@ def build_report_data(
     source_type_str = "simulacion"
     if audit_run and audit_run.get("source_type"):
         source_type_str = str(audit_run["source_type"])
+    elif resources and any(r.get("source_type") == "aws" for r in resources):
+        source_type_str = "aws"
 
     status_str = "completada"
     if audit_run and audit_run.get("status"):

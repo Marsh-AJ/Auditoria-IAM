@@ -135,9 +135,17 @@ class AWSIAMDataSource:
                 "Configuración de credenciales de AWS incompleta."
             ) from None
 
-        if isinstance(exc, botocore.exceptions.EndpointConnectionError):
+        if isinstance(
+            exc,
+            (
+                botocore.exceptions.EndpointConnectionError,
+                botocore.exceptions.ConnectTimeoutError,
+                botocore.exceptions.ReadTimeoutError,
+                botocore.exceptions.ConnectionClosedError,
+            ),
+        ):
             raise AWSIAMConnectionError(
-                "No fue posible establecer conexión con el endpoint de AWS IAM."
+                "No fue posible establecer conexión con el endpoint de AWS IAM (tiempo de espera o error de red)."
             ) from None
 
         if isinstance(exc, botocore.exceptions.ClientError):
@@ -249,27 +257,31 @@ class AWSIAMDataSource:
         if policy_arn in self._policy_doc_cache:
             return self._policy_doc_cache[policy_arn]
 
-        policy_meta = self._call_iam_operation("get_policy", PolicyArn=policy_arn)
-        if not policy_meta or not isinstance(policy_meta, dict):
-            return None
+        try:
+            policy_meta = self._call_iam_operation("get_policy", PolicyArn=policy_arn)
+            if not policy_meta or not isinstance(policy_meta, dict):
+                return None
 
-        default_version = policy_meta.get("Policy", {}).get("DefaultVersionId")
-        if not default_version:
-            return None
+            default_version = policy_meta.get("Policy", {}).get("DefaultVersionId")
+            if not default_version:
+                return None
 
-        version_data = self._call_iam_operation(
-            "get_policy_version",
-            PolicyArn=policy_arn,
-            VersionId=default_version
-        )
-        if not version_data or not isinstance(version_data, dict):
-            return None
+            version_data = self._call_iam_operation(
+                "get_policy_version",
+                PolicyArn=policy_arn,
+                VersionId=default_version
+            )
+            if not version_data or not isinstance(version_data, dict):
+                return None
 
-        raw_doc = version_data.get("PolicyVersion", {}).get("Document")
-        normalized = self._normalize_policy_document(raw_doc)
-        if normalized:
-            self._policy_doc_cache[policy_arn] = normalized
-        return normalized
+            raw_doc = version_data.get("PolicyVersion", {}).get("Document")
+            normalized = self._normalize_policy_document(raw_doc)
+            if normalized:
+                self._policy_doc_cache[policy_arn] = normalized
+            return normalized
+        except (AWSIAMPermissionError, AWSIAMDataSourceError) as exc:
+            logger.warning("No fue posible consultar la política administrada '%s': %s", policy_arn, exc)
+            return None
 
     def _create_incomplete_policy_marker(
         self,
@@ -347,8 +359,12 @@ class AWSIAMDataSource:
             )
             for p_name in inline_names:
                 if isinstance(p_name, str):
-                    p_resp = self._call_iam_operation("get_group_policy", GroupName=group_name, PolicyName=p_name)
-                    doc = self._normalize_policy_document(p_resp.get("PolicyDocument"))
+                    try:
+                        p_resp = self._call_iam_operation("get_group_policy", GroupName=group_name, PolicyName=p_name)
+                        doc = self._normalize_policy_document(p_resp.get("PolicyDocument"))
+                    except (AWSIAMPermissionError, AWSIAMDataSourceError) as exc:
+                        logger.warning("No fue posible consultar la política inline '%s' del grupo '%s': %s", p_name, group_name, exc)
+                        doc = None
                     if doc:
                         policy_copy = dict(doc)
                         policy_copy["_source_type"] = "group_inline"
@@ -401,8 +417,12 @@ class AWSIAMDataSource:
         )
         for p_name in inline_policy_names:
             if isinstance(p_name, str):
-                p_resp = self._call_iam_operation("get_user_policy", UserName=username, PolicyName=p_name)
-                doc = self._normalize_policy_document(p_resp.get("PolicyDocument"))
+                try:
+                    p_resp = self._call_iam_operation("get_user_policy", UserName=username, PolicyName=p_name)
+                    doc = self._normalize_policy_document(p_resp.get("PolicyDocument"))
+                except (AWSIAMPermissionError, AWSIAMDataSourceError) as exc:
+                    logger.warning("No fue posible consultar la política inline '%s' del usuario '%s': %s", p_name, username, exc)
+                    doc = None
                 if doc:
                     policy_copy = dict(doc)
                     policy_copy["_source_type"] = "user_inline"
@@ -473,8 +493,12 @@ class AWSIAMDataSource:
         )
         for p_name in inline_names:
             if isinstance(p_name, str):
-                p_resp = self._call_iam_operation("get_role_policy", RoleName=role_name, PolicyName=p_name)
-                doc = self._normalize_policy_document(p_resp.get("PolicyDocument"))
+                try:
+                    p_resp = self._call_iam_operation("get_role_policy", RoleName=role_name, PolicyName=p_name)
+                    doc = self._normalize_policy_document(p_resp.get("PolicyDocument"))
+                except (AWSIAMPermissionError, AWSIAMDataSourceError) as exc:
+                    logger.warning("No fue posible consultar la política inline '%s' del rol '%s': %s", p_name, role_name, exc)
+                    doc = None
                 if doc:
                     policy_copy = dict(doc)
                     policy_copy["_source_type"] = "role_inline"

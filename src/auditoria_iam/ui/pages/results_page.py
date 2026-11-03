@@ -1,18 +1,16 @@
 """
 Página de Resultados para el Sistema de Auditoría IAM.
-Presenta el resumen cuantitativo de la última auditoría, la visualización tabular
-detallada de los resultados reales generados por el motor de auditoría y controles
-para la exportación de informes en formatos PDF, Excel (XLSX) y CSV.
+Presenta indicadores ejecutivos tipo consola SaaS, visualización tabular limpia
+integrada en tarjeta corporativa y exportación en formatos PDF, Excel (XLSX) y CSV.
 """
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -25,12 +23,12 @@ from PySide6.QtWidgets import (
 
 from src.auditoria_iam.application.audit_service import AuditService
 from src.auditoria_iam.audit.models import AuditResult
+from src.auditoria_iam.ui.icons import create_icon_badge, render_svg_icon
 
 
 class ResultsPage(QWidget):
     """Pantalla para la visualización de resultados técnicos de auditoría y exportación."""
 
-    # Mapeo de reglas a controles ISO/IEC 27001:2022
     RULE_TO_ISO = {
         "IAM-001": "5.15",
         "IAM-002": "5.16",
@@ -53,97 +51,143 @@ class ResultsPage(QWidget):
         self._init_ui()
 
     def _init_ui(self) -> None:
+        self.setStyleSheet("QWidget#results_page { background-color: #F5F7FA; }")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setContentsMargins(28, 24, 28, 28)
         layout.setSpacing(16)
 
         # 1. Encabezado de la página
+        title_col = QVBoxLayout()
+        title_col.setSpacing(3)
+
         title = QLabel("Resultados de Auditoría")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #f8fafc;")
+        title.setProperty("class", "page_title")
 
         subtitle = QLabel(
-            "Visualización detallada de la evaluación de controles ISO/IEC 27001:2022 y hallazgos técnicos."
+            "Inspección granular de verificaciones técnicas ISO/IEC 27001:2022 y generación de informes ejecutivos."
         )
-        subtitle.setStyleSheet("font-size: 13px; color: #94a3b8;")
+        subtitle.setProperty("class", "page_subtitle")
 
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        title_col.addWidget(title)
+        title_col.addWidget(subtitle)
+        layout.addLayout(title_col)
 
-        # 2. Tarjetas de Resumen Cuantitativo
-        self.summary_container = QFrame()
-        self.summary_container.setStyleSheet(
-            "background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px;"
+        # 2. Fila de 4 tarjetas KPI independientes (consistentes con Dashboard)
+        kpi_row = QHBoxLayout()
+        kpi_row.setSpacing(16)
+
+        c_tot, self.lbl_total, self.pill_total = self._create_kpi_card(
+            "TOTAL EVALUACIONES",
+            "0",
+            "Base 100%",
+            "#294F78",
+            "#EEF4FF",
+            "#DBEAFE",
+            "layers",
+            "Criterios procesados",
         )
-        summary_grid = QGridLayout(self.summary_container)
-        summary_grid.setSpacing(12)
+        c_conf, self.lbl_conforme, self.pill_conforme = self._create_kpi_card(
+            "CONFORMES",
+            "0",
+            "✓ 0%",
+            "#16845B",
+            "#ECFDF5",
+            "#A7F3D0",
+            "shield_check",
+            "Cumplen parámetros ISO",
+        )
+        c_hall, self.lbl_hallazgo, self.pill_hallazgo = self._create_kpi_card(
+            "HALLAZGOS",
+            "0",
+            "! 0%",
+            "#D64545",
+            "#FEF2F2",
+            "#FECACA",
+            "alert_triangle",
+            "Desviaciones detectadas",
+        )
+        c_noev, self.lbl_no_evaluable, self.pill_no_eval = self._create_kpi_card(
+            "NO EVALUABLES",
+            "0",
+            "• 0%",
+            "#B45309",
+            "#FFFBEB",
+            "#FDE68A",
+            "info_circle",
+            "Metadatos no aplicables",
+        )
 
-        # Crear widgets de resumen
-        self.lbl_total = self._create_summary_card(summary_grid, 0, "Total Evaluaciones", "0", "#38bdf8")
-        self.lbl_conforme = self._create_summary_card(summary_grid, 1, "Conforme", "0", "#22c55e")
-        self.lbl_hallazgo = self._create_summary_card(summary_grid, 2, "Hallazgo", "0", "#ef4444")
-        self.lbl_no_evaluable = self._create_summary_card(summary_grid, 3, "No evaluable", "0", "#94a3b8")
+        kpi_row.addWidget(c_tot, stretch=1)
+        kpi_row.addWidget(c_conf, stretch=1)
+        kpi_row.addWidget(c_hall, stretch=1)
+        kpi_row.addWidget(c_noev, stretch=1)
+        layout.addLayout(kpi_row)
 
-        layout.addWidget(self.summary_container)
-
-        # 3. Banner informativo de estado
+        # 3. Franja discreta de estado informativo
         self.info_banner = QFrame()
-        self.info_banner.setStyleSheet(
-            "background-color: #0f172a; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 12px;"
-        )
+        self.info_banner.setObjectName("results_info_banner")
+        self._set_banner_style("#D49A32")
         banner_layout = QVBoxLayout(self.info_banner)
-        banner_layout.setContentsMargins(12, 8, 12, 8)
+        banner_layout.setContentsMargins(16, 10, 16, 10)
 
         self.banner_text = QLabel(
-            "ℹ Todavía no se ha ejecutado ninguna auditoría en esta sesión.\n"
-            "Seleccione 'Ejecutar auditoría' en el menú lateral para iniciar una evaluación técnica con el simulador de datos."
+            "ℹ  Aún no se ha cargado ninguna auditoría en esta sesión. "
+            "Inicie una evaluación desde 'Ejecutar auditoría' o seleccione un registro en 'Historial'."
         )
         self.banner_text.setWordWrap(True)
-        self.banner_text.setStyleSheet("color: #e2e8f0; font-size: 13px; line-height: 1.4;")
+        self.banner_text.setStyleSheet("color: #334155; font-size: 12.5px; font-weight: 500;")
         banner_layout.addWidget(self.banner_text)
         layout.addWidget(self.info_banner)
 
-        # 4. Barra de acciones de exportación
-        export_layout = QHBoxLayout()
-        export_layout.setSpacing(10)
+        # 4. Tarjeta de tabla estilo consola empresarial (con cabecera y barra de exportación integrada)
+        table_card = QFrame()
+        table_card.setProperty("class", "card")
+        tc_layout = QVBoxLayout(table_card)
+        tc_layout.setContentsMargins(0, 14, 0, 6)
+        tc_layout.setSpacing(10)
 
-        lbl_export = QLabel("Exportar informe de esta auditoría:")
-        lbl_export.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
-        export_layout.addWidget(lbl_export)
+        toolbar_row = QHBoxLayout()
+        toolbar_row.setContentsMargins(20, 0, 20, 4)
+        toolbar_row.setSpacing(8)
 
-        self.btn_export_pdf = QPushButton("Exportar PDF 📄")
+        lbl_table_title = QLabel("Detalle de Evaluaciones Técnicas")
+        lbl_table_title.setProperty("class", "card_header_title")
+        toolbar_row.addWidget(lbl_table_title)
+        toolbar_row.addStretch()
+
+        lbl_export = QLabel("Exportar:")
+        lbl_export.setStyleSheet("color: #64748B; font-size: 12px; font-weight: 600; margin-right: 4px;")
+        toolbar_row.addWidget(lbl_export)
+
+        self.btn_export_pdf = QPushButton("  PDF")
+        self.btn_export_pdf.setProperty("class", "primary_button")
+        self.btn_export_pdf.setIcon(render_svg_icon("file_export", color="#FFFFFF", disabled_color="#94A3B8", size=14))
+        self.btn_export_pdf.setIconSize(QSize(14, 14))
         self.btn_export_pdf.setCursor(Qt.PointingHandCursor)
         self.btn_export_pdf.setEnabled(False)
-        self.btn_export_pdf.setStyleSheet(
-            "background-color: #0284c7; color: #ffffff; border: none; "
-            "border-radius: 6px; padding: 7px 14px; font-weight: bold; font-size: 12px;"
-        )
         self.btn_export_pdf.clicked.connect(lambda: self.export_results("pdf"))
-        export_layout.addWidget(self.btn_export_pdf)
+        toolbar_row.addWidget(self.btn_export_pdf)
 
-        self.btn_export_excel = QPushButton("Exportar Excel 📊")
+        self.btn_export_excel = QPushButton("  Excel")
+        self.btn_export_excel.setProperty("class", "secondary_button")
+        self.btn_export_excel.setIcon(render_svg_icon("file_export", color="#16845B", disabled_color="#94A3B8", size=14))
+        self.btn_export_excel.setIconSize(QSize(14, 14))
         self.btn_export_excel.setCursor(Qt.PointingHandCursor)
         self.btn_export_excel.setEnabled(False)
-        self.btn_export_excel.setStyleSheet(
-            "background-color: #059669; color: #ffffff; border: none; "
-            "border-radius: 6px; padding: 7px 14px; font-weight: bold; font-size: 12px;"
-        )
         self.btn_export_excel.clicked.connect(lambda: self.export_results("xlsx"))
-        export_layout.addWidget(self.btn_export_excel)
+        toolbar_row.addWidget(self.btn_export_excel)
 
-        self.btn_export_csv = QPushButton("Exportar CSV 📑")
+        self.btn_export_csv = QPushButton("  CSV")
+        self.btn_export_csv.setProperty("class", "secondary_button")
+        self.btn_export_csv.setIcon(render_svg_icon("file_export", color="#294F78", disabled_color="#94A3B8", size=14))
+        self.btn_export_csv.setIconSize(QSize(14, 14))
         self.btn_export_csv.setCursor(Qt.PointingHandCursor)
         self.btn_export_csv.setEnabled(False)
-        self.btn_export_csv.setStyleSheet(
-            "background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; "
-            "border-radius: 6px; padding: 7px 14px; font-weight: 500; font-size: 12px;"
-        )
         self.btn_export_csv.clicked.connect(lambda: self.export_results("csv"))
-        export_layout.addWidget(self.btn_export_csv)
+        toolbar_row.addWidget(self.btn_export_csv)
 
-        export_layout.addStretch()
-        layout.addLayout(export_layout)
+        tc_layout.addLayout(toolbar_row)
 
-        # 5. Estructura de tabla con las columnas requeridas
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(6)
         self.results_table.setHorizontalHeaderLabels([
@@ -162,34 +206,89 @@ class ResultsPage(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.Stretch)
 
+        self.results_table.verticalHeader().setVisible(False)
         self.results_table.setRowCount(0)
         self.results_table.setAlternatingRowColors(True)
-        self.results_table.setStyleSheet(
-            "background-color: #0f172a; alternate-background-color: #131d31; "
-            "border: 1px solid #334155; border-radius: 6px; gridline-color: #1e293b; color: #f8fafc;"
+        self.results_table.setWordWrap(True)
+
+        tc_layout.addWidget(self.results_table, stretch=1)
+        layout.addWidget(table_card, stretch=1)
+
+    def _set_banner_style(self, accent_hex: str) -> None:
+        self.info_banner.setStyleSheet(
+            f"QFrame#results_info_banner {{ background-color: #FFFFFF; border: 1px solid #E5E9F0; "
+            f"border-left: 3px solid {accent_hex}; border-radius: 10px; }}"
         )
 
-        layout.addWidget(self.results_table)
+    @staticmethod
+    def _create_kpi_card(
+        label_text: str,
+        default_val: str,
+        pill_text: str,
+        fg_hex: str,
+        bg_hex: str,
+        border_hex: str,
+        icon_name: str,
+        footer_caption: str,
+    ) -> tuple[QFrame, QLabel, QLabel]:
+        card = QFrame()
+        card.setProperty("class", "card")
 
-    def _create_summary_card(
-        self, grid: QGridLayout, col: int, label_text: str, default_val: str, color_hex: str
-    ) -> QLabel:
-        """Crea un indicador métrico con etiqueta y valor grande."""
-        card_widget = QWidget()
-        card_layout = QVBoxLayout(card_widget)
-        card_layout.setContentsMargins(8, 4, 8, 4)
-        card_layout.setSpacing(2)
+        c_layout = QVBoxLayout(card)
+        c_layout.setContentsMargins(0, 0, 0, 0)
+        c_layout.setSpacing(0)
 
+        body = QWidget()
+        b_layout = QVBoxLayout(body)
+        b_layout.setContentsMargins(18, 14, 18, 12)
+        b_layout.setSpacing(8)
+
+        top_row = QHBoxLayout()
         title = QLabel(label_text)
-        title.setStyleSheet("font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase;")
+        title.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748B; letter-spacing: 0.6px;")
+        icon_box = create_icon_badge(
+            icon_name,
+            fg_color=fg_hex,
+            bg_color=bg_hex,
+            border_color=border_hex,
+            box_size=32,
+            icon_size=16,
+            radius=8,
+        )
+        top_row.addWidget(title, stretch=1)
+        top_row.addWidget(icon_box)
+        b_layout.addLayout(top_row)
 
+        mid_row = QHBoxLayout()
         val_label = QLabel(default_val)
-        val_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {color_hex};")
+        val_label.setStyleSheet("font-size: 26px; font-weight: 800; color: #0F172A;")
 
-        card_layout.addWidget(title)
-        card_layout.addWidget(val_label)
-        grid.addWidget(card_widget, 0, col)
-        return val_label
+        pill_lbl = QLabel(pill_text)
+        pill_lbl.setStyleSheet(
+            f"background-color: {bg_hex}; color: {fg_hex}; border: 1px solid {border_hex}; "
+            "border-radius: 10px; padding: 2px 8px; font-size: 10.5px; font-weight: 700;"
+        )
+        mid_row.addWidget(val_label)
+        mid_row.addStretch()
+        mid_row.addWidget(pill_lbl, alignment=Qt.AlignVCenter)
+        b_layout.addLayout(mid_row)
+
+        c_layout.addWidget(body)
+
+        line = QFrame()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background-color: #F1F5F9; border: none;")
+        c_layout.addWidget(line)
+
+        footer = QWidget()
+        f_layout = QHBoxLayout(footer)
+        f_layout.setContentsMargins(18, 7, 18, 8)
+        f_lbl = QLabel(footer_caption)
+        f_lbl.setStyleSheet("color: #64748B; font-size: 11px; font-weight: 500;")
+        f_layout.addWidget(f_lbl)
+        c_layout.addWidget(footer)
+
+        return card, val_label, pill_lbl
 
     def load_results(
         self,
@@ -201,83 +300,94 @@ class ResultsPage(QWidget):
         """
         Carga y visualiza los resultados reales de auditoría en la tabla y contadores de resumen.
         Habilita los botones de exportación cuando hay datos disponibles.
-
-        Args:
-            results: Lista de instancias AuditResult generadas por AuditEngine o recuperadas de MySQL.
-            resources: Lista de recursos evaluados para enriquecer metadatos de visualización.
-            summary: Diccionario con total, conforme, hallazgo y no_evaluable.
-            run_id: Identificador opcional de la ejecución histórica en MySQL.
         """
         self._current_results = results
         self._current_resources = resources
         self._current_summary = summary
         self._current_run_id = run_id
 
-        # Habilitar botones de exportación si existen datos
         has_data = len(results) > 0
         self.btn_export_pdf.setEnabled(has_data)
         self.btn_export_excel.setEnabled(has_data)
         self.btn_export_csv.setEnabled(has_data)
 
-        # 1. Actualizar indicadores numéricos de resumen
-        self.lbl_total.setText(str(summary.get("total", len(results))))
-        self.lbl_conforme.setText(str(summary.get("conforme", 0)))
-        self.lbl_hallazgo.setText(str(summary.get("hallazgo", 0)))
-        self.lbl_no_evaluable.setText(str(summary.get("no_evaluable", 0)))
+        total_n = int(summary.get("total", len(results)))
+        conf_n = int(summary.get("conforme", 0))
+        hall_n = int(summary.get("hallazgo", 0))
+        noev_n = int(summary.get("no_evaluable", 0))
 
-        # 2. Actualizar banner de estado
-        self.info_banner.setStyleSheet(
-            "background-color: #0f172a; border-left: 4px solid #22c55e; border-radius: 6px; padding: 12px;"
-        )
+        self.lbl_total.setText(str(total_n))
+        self.lbl_conforme.setText(str(conf_n))
+        self.lbl_hallazgo.setText(str(hall_n))
+        self.lbl_no_evaluable.setText(str(noev_n))
+
+        if total_n > 0:
+            self.pill_conforme.setText(f"✓ {round((conf_n / total_n) * 100, 1)}%")
+            self.pill_hallazgo.setText(f"! {round((hall_n / total_n) * 100, 1)}%")
+            self.pill_no_eval.setText(f"• {round((noev_n / total_n) * 100, 1)}%")
+        else:
+            self.pill_conforme.setText("✓ 0%")
+            self.pill_hallazgo.setText("! 0%")
+            self.pill_no_eval.setText("• 0%")
+
+        self._set_banner_style("#16845B")
         if run_id is not None:
             self.banner_text.setText(
-                f"✓ Mostrando resultados históricos de la ejecución #{run_id} recuperados desde MySQL. "
-                f"Se evaluaron {len(resources)} recursos IAM frente a las reglas técnicas "
-                f"con un total de {len(results)} evaluaciones registradas."
+                f"✓  Mostrando resultados históricos de la ejecución #{run_id} recuperados desde MySQL "
+                f"({len(resources)} recursos IAM · {len(results)} evaluaciones registradas)."
             )
         else:
             self.banner_text.setText(
-                f"✓ Mostrando resultados reales de la última ejecución (Fuente: Simulador). "
-                f"Se evaluaron {len(resources)} recursos IAM frente a las 4 reglas técnicas "
-                f"con un total de {len(results)} evaluaciones registradas."
+                f"✓  Mostrando resultados de la última ejecución completada "
+                f"({len(resources)} recursos IAM · {len(results)} evaluaciones registradas)."
             )
 
-        # 3. Construir índice de recursos por ID
         resource_index: Dict[Any, Dict[str, Any]] = {
             r.get("id"): r for r in resources if "id" in r
         }
 
-        # 4. Poblar la tabla de resultados
         self.results_table.setRowCount(len(results))
 
         for row_idx, res in enumerate(results):
-            # Obtener datos del recurso evaluado
             res_meta = resource_index.get(res.resource_id, {})
             resource_name = res_meta.get("resource_key") or res_meta.get("display_name") or f"ID {res.resource_id}"
             resource_type = res_meta.get("resource_type", "IAM_RESOURCE")
             iso_control = self.RULE_TO_ISO.get(res.rule_code, "N/A")
 
-            # Crear ítems de tabla
             item_resource = QTableWidgetItem(str(resource_name))
+            item_resource.setToolTip(f"{resource_name} ({resource_type})")
+            res_font = QFont()
+            res_font.setBold(True)
+            item_resource.setFont(res_font)
+
             item_type = QTableWidgetItem(str(resource_type))
+            item_type.setForeground(QColor("#64748B"))
+
             item_rule = QTableWidgetItem(str(res.rule_code))
+            item_rule.setTextAlignment(Qt.AlignCenter)
+
             item_iso = QTableWidgetItem(f"ISO {iso_control}")
+            item_iso.setTextAlignment(Qt.AlignCenter)
+
             item_status = QTableWidgetItem(str(res.result_status))
             item_justification = QTableWidgetItem(str(res.justification))
+            item_justification.setToolTip(str(res.justification))
 
-            # Estilo condicional según estado del resultado
             status_font = QFont()
             status_font.setBold(True)
             item_status.setFont(status_font)
+            item_status.setTextAlignment(Qt.AlignCenter)
 
             if res.result_status == "Conforme":
-                item_status.setForeground(QColor("#22c55e"))
+                item_status.setForeground(QColor("#16845B"))
+                item_status.setBackground(QColor("#ECFDF5"))
             elif res.result_status == "Hallazgo":
-                item_status.setForeground(QColor("#ef4444"))
-            else:  # No evaluable
-                item_status.setForeground(QColor("#94a3b8"))
+                item_status.setForeground(QColor("#D64545"))
+                item_status.setBackground(QColor("#FEF2F2"))
+            else:
+                item_status.setForeground(QColor("#B45309"))
+                item_status.setBackground(QColor("#FFFBEB"))
 
-            # Deshabilitar edición en todas las celdas
             for item in (item_resource, item_type, item_rule, item_iso, item_status, item_justification):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
@@ -288,16 +398,16 @@ class ResultsPage(QWidget):
             self.results_table.setItem(row_idx, 4, item_status)
             self.results_table.setItem(row_idx, 5, item_justification)
 
+        self.results_table.resizeRowsToContents()
+
     def export_results(self, format_type: str) -> None:
         """
         Abre un diálogo estándar para seleccionar ubicación y genera el archivo
         de reporte de auditoría en el formato indicado.
         """
         if not self._current_results:
-            self.info_banner.setStyleSheet(
-                "background-color: #0f172a; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 12px;"
-            )
-            self.banner_text.setText("⚠️ No hay resultados disponibles para exportar en esta sesión.")
+            self._set_banner_style("#D49A32")
+            self.banner_text.setText("⚠  No hay resultados disponibles para exportar en esta sesión.")
             return
 
         fmt = format_type.strip().lower()
@@ -324,7 +434,7 @@ class ResultsPage(QWidget):
         )
 
         if not filepath:
-            return  # Cancelado por el usuario
+            return
 
         try:
             saved_path = self._audit_service.export_audit_report(
@@ -335,17 +445,12 @@ class ResultsPage(QWidget):
                 resources=self._current_resources,
                 summary=self._current_summary,
             )
-            self.info_banner.setStyleSheet(
-                "background-color: #0f172a; border-left: 4px solid #22c55e; border-radius: 6px; padding: 12px;"
-            )
+            self._set_banner_style("#16845B")
             self.banner_text.setText(
-                f"✓ Informe {fmt.upper()} exportado exitosamente.\n"
-                f"Ruta: {saved_path}"
+                f"✓  Informe {fmt.upper()} exportado exitosamente · Ruta: {saved_path}"
             )
         except Exception as exc:
-            self.info_banner.setStyleSheet(
-                "background-color: #0f172a; border-left: 4px solid #ef4444; border-radius: 6px; padding: 12px;"
-            )
+            self._set_banner_style("#D64545")
             self.banner_text.setText(
-                f"⚠️ Error al exportar el informe {fmt.upper()} ({type(exc).__name__}): {exc}"
+                f"⚠  Error al exportar el informe {fmt.upper()} ({type(exc).__name__}): {exc}"
             )

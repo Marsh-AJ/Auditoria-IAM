@@ -1,0 +1,8 @@
+# Dependencias de desarrollo, calidad de software y pruebas automatizadas
+# Sistema de Auditoría IAM - UPHARVEN C.A.
+
+-r requirements.txt
+
+# Marco de pruebas unitarias, de integración y funcionales
+pytest>=8.0.0
+

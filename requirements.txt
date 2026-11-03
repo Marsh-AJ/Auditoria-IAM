@@ -1,5 +1,20 @@
-boto3>=1.34.0
-PySide6>=6.6.0
-reportlab>=4.0.0
-openpyxl>=3.1.0
+# Dependencias de ejecución del Sistema de Auditoría IAM
+# Proyecto de Tesis: Modelo automatizado para la auditoría IAM (ISO 27001) - UPHARVEN C.A.
 
+# Integración con servicios de nube (AWS IAM)
+boto3>=1.34.0
+
+# Interfaz gráfica de escritorio (Qt 6) y visualización
+PySide6>=6.6.0
+
+# Conexión y persistencia transaccional en MySQL Server
+mysql-connector-python>=9.0.0
+
+# Carga y validación de variables de entorno (.env)
+python-dotenv>=1.0.0
+
+# Generación de informes ejecutivos en formato PDF
+reportlab>=4.0.0
+
+# Generación y formateo de libros de cálculo en formato Excel (XLSX)
+openpyxl>=3.1.0

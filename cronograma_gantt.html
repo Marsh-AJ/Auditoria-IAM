@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cronograma del Prototipo - Auditoría IAM (ISO 27001)</title>
+  <style>
+    /* =====================================================================
+       VARIABLES DE COLOR Y DISEÑO
+       Inspiradas directamente en la paleta y formas de la imagen de referencia:
+       - Fondo blanco limpio
+       - Azul oscuro (#212932) y azul grisáceo (#99abbb) alternados
+       - Celdas inactivas en gris muy claro (#f1f1f1)
+       - Recuadros blancos redondeados con bordes finos
+       ===================================================================== */
+    :root {
+      --bg-page: #FFFFFF;
+      --color-dark: #212932;        /* Tono azul oscuro / antracita de la referencia */
+      --color-light: #99abbb;       /* Tono azul grisáceo de la referencia */
+      --color-inactive: #f1f1f1;    /* Gris muy claro para celdas sin actividad */
+      --color-border: #212932;      /* Borde de los recuadros de tareas */
+      --color-text-main: #212932;   /* Texto principal de tareas */
+      --color-text-muted: #64748b;  /* Texto de notas y subtítulos */
+      --color-white: #FFFFFF;
+      --radius-pill: 9999px;        /* Píldora totalmente redondeada para cápsulas y meses */
+      --radius-card: 14px;          /* Esquinas redondeadas para los recuadros de actividades */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden; /* Evita cualquier barra de desplazamiento */
+      background-color: var(--bg-page);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Contenedor optimizado para diapositiva horizontal 16:9 */
+    .slide-wrapper {
+      width: 100vw;
+      height: 100vh;
+      max-width: 177.78vh; /* Garantiza proporción 16:9 en pantallas ultrapanorámicas */
+      max-height: 56.25vw; /* Garantiza proporción 16:9 en pantallas verticales */
+      padding: clamp(14px, 2.4vh, 28px) clamp(20px, 3.2vw, 44px);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-sizing: border-box;
+      background: var(--bg-page);
+      position: relative;
+    }
+
+    /* Encabezado académico de la diapositiva */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding-bottom: clamp(4px, 0.7vh, 8px);
+      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: clamp(4px, 0.8vh, 10px);
+    }
+
+    .slide-header .title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .slide-header .academic-title {
+      font-size: clamp(14px, 1.45vh, 18px);
+      font-weight: 800;
+      color: var(--color-dark);
+      letter-spacing: -0.2px;
+      text-transform: uppercase;
+    }
+
+    .slide-header .academic-subtitle {
+      font-size: clamp(11px, 1.1vh, 13px);
+      font-weight: 500;
+      color: var(--color-text-muted);
+    }
+
+    .slide-header .badge-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .period-badge {
+      font-size: clamp(10.5px, 1.05vh, 12.5px);
+      font-weight: 700;
+      color: var(--color-dark);
+      background-color: #f1f5f9;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      border: 1px solid #cbd5e1;
+      letter-spacing: 0.4px;
+    }
+
+    .fs-btn {
+      background: none;
+      border: 1px solid #cbd5e1;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .fs-btn:hover {
+      background-color: #f1f5f9;
+      color: var(--color-dark);
+      border-color: #94a3b8;
+    }
+
+    /* =====================================================================
+       ESTRUCTURA VISUAL DEL DIAGRAMA GANTT
+       ===================================================================== */
+    .gantt-container {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(7px, 1.15vh, 13px);
+      flex: 1;
+      justify-content: center;
+    }
+
+    /* Filas del diagrama */
+    .gantt-row {
+      display: flex;
+      align-items: center;
+      gap: clamp(12px, 1.6vw, 24px);
+      width: 100%;
+    }
+
+    /* Columna izquierda de tareas */
+    .task-column {
+      width: clamp(210px, 21.5vw, 290px);
+      flex-shrink: 0;
+    }
+
+    /* Recuadro de TAREAS en el encabezado */
+    .task-header-box {
+      height: clamp(34px, 4.4vh, 46px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--color-border);
+      background-color: var(--color-white);
+      border-radius: var(--radius-pill);
+      font-size: clamp(12px, 1.35vh, 15px);
+      font-weight: 800;
+      color: var(--color-dark);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    /* Recuadros blancos con bordes finos para cada actividad */
+    .task-card {
+      height: clamp(40px, 6.2vh, 56px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 4px 14px;
+      border: 1.5px solid var(--color-border);
+      background-color: var(--color-white);
+      border-radius: var(--radius-card);
+      font-size: clamp(11px, 1.16vh, 13.5px);
+      font-weight: 700;
+      color: var(--color-text-main);
+      line-height: 1.22;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+      transition: all 0.2s ease;
+      cursor: default;
+    }
+
+    .task-card:hover {
+      border-color: #0f172a;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.06);
+      transform: translateX(2px);
+    }
+
+    /* Contenedor derecho de la línea de tiempo */
+    .timeline-column {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: clamp(10px, 1.2vw, 18px);
+    }
+
+    /* Encabezados de mes (píldoras superiores redondeadas) */
+    .month-header-pill {
+      flex: 1;
+      height: clamp(34px, 4.4vh, 46px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-pill);
+      font-size: clamp(12px, 1.35vh, 15px);
+      font-weight: 800;
+      color: var(--color-white);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .month-dark {
+      background-color: var(--color-dark);
+    }
+
+    .month-light {
+      background-color: var(--color-light);
+    }
+
+    /* Grupo de cápsulas correspondiente a un mes (4 cápsulas por mes) */
+    .month-capsule-group {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: clamp(5px, 0.6vw, 9px);
+    }
+
+    /* Cápsula individual (celda vertical redondeada) */
+    .capsule {
+      flex: 1;
+      height: clamp(38px, 5.8vh, 52px);
+      border-radius: var(--radius-pill);
+      background-color: var(--color-inactive);
+      transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
+      cursor: pointer;
+      position: relative;
+    }
+
+    /* Períodos de ejecución en azul oscuro */
+    .capsule.active-dark {
+      background-color: var(--color-dark);
+    }
+
+    /* Períodos de ejecución en azul grisáceo */
+    .capsule.active-light {
+      background-color: var(--color-light);
+    }
+
+    /* Realce visual interactivo */
+    .capsule.active-dark:hover,
+    .capsule.active-light:hover {
+      transform: scaleY(1.08) scaleX(1.04);
+      filter: brightness(1.12);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+      z-index: 5;
+    }
+
+    .capsule:not(.active-dark):not(.active-light):hover {
+      background-color: #e5e7eb;
+    }
+
+    /* =====================================================================
+       TOOLTIP INFORMATIVO FLOTANTE
+       ===================================================================== */
+    #tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background-color: #0f172a;
+      color: #ffffff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.45);
+      z-index: 1000;
+      white-space: nowrap;
+      border: 1px solid #334155;
+    }
+
+    #tooltip .tt-phase {
+      font-weight: 800;
+      color: #93c5fd;
+      margin-bottom: 2px;
+      font-size: 12.5px;
+    }
+
+    #tooltip .tt-dates {
+      color: #f8fafc;
+      font-weight: 600;
+    }
+
+    #tooltip .tt-segment {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+
+    /* =====================================================================
+       PIE DE DIAPOSITIVA Y NOTA OBLIGATORIA
+       ===================================================================== */
+    .slide-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: clamp(4px, 0.7vh, 8px);
+      border-top: 1px solid #e2e8f0;
+      margin-top: clamp(4px, 0.8vh, 10px);
+    }
+
+    .footer-note {
+      font-size: clamp(11px, 1.1vh, 12.5px);
+      color: var(--color-text-muted);
+      font-style: italic;
+    }
+
+    .legend-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: clamp(10.5px, 1.05vh, 12px);
+      font-weight: 600;
+      color: var(--color-text-main);
+    }
+
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+    }
+
+    .legend-dark { background-color: var(--color-dark); }
+    .legend-light { background-color: var(--color-light); }
+    .legend-inactive { background-color: var(--color-inactive); border: 1px solid #d1d5db; }
+  </style>
+</head>
+<body>
+
+  <div class="slide-wrapper" id="slide">
+
+    <!-- 1. ENCABEZADO DE LA DIAPOSITIVA ACADÉMICA -->
+    <header class="slide-header">
+      <div class="title-group">
+        <h1 class="academic-title">Cronograma de Construcción del Prototipo</h1>
+        <p class="academic-subtitle">Modelo automatizado para la auditoría IAM basado en ISO/IEC 27001 • UPHARVEN C.A.</p>
+      </div>
+      <div class="badge-group">
+        <span class="period-badge">JULIO – 06 DE NOVIEMBRE 2026</span>
+        <button class="fs-btn" onclick="toggleFullScreen()" title="Pantalla completa para presentación (tecla F)">⛶ Pantalla Completa</button>
+      </div>
+    </header>
+
+    <!-- 2. DIAGRAMA GANTT PRINCIPAL -->
+    <main class="gantt-container" id="ganttRoot">
+      <!-- Se genera mediante JavaScript estructurado para facilitar modificaciones futuras -->
+    </main>
+
+    <!-- 3. PIE DE DIAPOSITIVA CON NOTA OBLIGATORIA Y LEYENDA -->
+    <footer class="slide-footer">
+      <p class="footer-note">Nota: Cronograma referencial de las actividades desarrolladas durante la construcción del prototipo.</p>
+      <div class="legend-group">
+        <div class="legend-item">
+          <span class="legend-color legend-dark"></span>
+          <span>Fase técnica activa (A)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-color legend-light"></span>
+          <span>Fase técnica activa (B)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-color legend-inactive"></span>
+          <span>Sin actividad programada</span>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Tooltip interactivo flotante -->
+  <div id="tooltip"></div>
+
+  <!-- =====================================================================
+       LÓGICA JAVASCRIPT Y CONFIGURACIÓN DEL CRONOGRAMA
+       ===================================================================== -->
+  <script>
+    /**
+     * CONFIGURACIÓN CENTRALIZADA DEL CRONOGRAMA
+     * Período de desarrollo: Julio a primera semana de Noviembre 2026 (Límite: 06/11/2026)
+     */
+    const GANTT_CONFIG = {
+      // 5 meses de desarrollo divididos en 4 segmentos semanales (20 columnas en total)
+      // En Noviembre, únicamente la primera semana (01/11 al 06/11) forma parte del desarrollo activo.
+      months: [
+        { name: "JULIO", style: "month-dark", weeks: ["01/07 - 07/07", "08/07 - 15/07", "16/07 - 23/07", "24/07 - 31/07"] },
+        { name: "AGOSTO", style: "month-light", weeks: ["01/08 - 07/08", "08/08 - 15/08", "16/08 - 23/08", "24/08 - 31/08"] },
+        { name: "SEPTIEMBRE", style: "month-dark", weeks: ["01/09 - 07/09", "08/09 - 15/09", "16/09 - 22/09", "23/09 - 30/09"] },
+        { name: "OCTUBRE", style: "month-light", weeks: ["01/10 - 07/10", "08/10 - 15/10", "16/10 - 23/10", "24/10 - 31/10"] },
+        { name: "NOVIEMBRE", style: "month-dark", weeks: ["01/11 - 06/11 (Cierre)", "07/11 - 14/11", "15/11 - 22/11", "23/11 - 30/11"] }
+      ],
+
+      // Las 7 actividades del proyecto con fechas exactas y columnas activas (índices 0 a 19)
+      // Ninguna actividad se extiende más allá de la columna 16 (06/11/2026)
+      tasks: [
+        {
+          id: 1,
+          name: "Diagnóstico inicial",
+          startDate: "01/07/2026",
+          endDate: "15/07/2026",
+          activeClass: "active-dark",
+          activeColumns: [0, 1] // Semanas 1 y 2 de Julio
+        },
+        {
+          id: 2,
+          name: "Diseño de base de datos<br>y configuración",
+          startDate: "13/07/2026",
+          endDate: "07/08/2026",
+          activeClass: "active-light",
+          activeColumns: [1, 2, 3, 4] // Julio (S2 a S4) + Agosto (S1)
+        },
+        {
+          id: 3,
+          name: "Desarrollo del motor<br>y reglas de auditoría",
+          startDate: "03/08/2026",
+          endDate: "04/09/2026",
+          activeClass: "active-dark",
+          activeColumns: [4, 5, 6, 7, 8] // Agosto completo (S1 a S4) + Septiembre (S1)
+        },
+        {
+          id: 4,
+          name: "Desarrollo de fuentes de datos<br>(simulador y AWS)",
+          startDate: "01/09/2026",
+          endDate: "02/10/2026",
+          activeClass: "active-light",
+          activeColumns: [8, 9, 10, 11, 12] // Septiembre completo (S1 a S4) + Octubre (S1)
+        },
+        {
+          id: 5,
+          name: "Desarrollo de la aplicación<br>de escritorio",
+          startDate: "14/09/2026",
+          endDate: "16/10/2026",
+          activeClass: "active-dark",
+          activeColumns: [10, 11, 12, 13, 14] // Septiembre (S3 a S4) + Octubre (S1 a S3)
+        },
+        {
+          id: 6,
+          name: "Dashboard y generación<br>de informes",
+          startDate: "05/10/2026",
+          endDate: "23/10/2026",
+          activeClass: "active-light",
+          activeColumns: [12, 13, 14] // Octubre (S1 a S3)
+        },
+        {
+          id: 7,
+          name: "Integración, pruebas<br>y documentación final",
+          startDate: "19/10/2026",
+          endDate: "06/11/2026",
+          activeClass: "active-dark",
+          activeColumns: [14, 15, 16] // Octubre (S3 a S4) + Noviembre (S1: 01/11 al 06/11 - Culminación)
+        }
+      ]
+    };
+
+    /**
+     * Construcción dinámica del HTML
+     */
+    function renderGantt() {
+      const root = document.getElementById("ganttRoot");
+      root.innerHTML = "";
+
+      // 1. FILA DE ENCABEZADOS (TAREAS + 5 MESES)
+      const headerRow = document.createElement("div");
+      headerRow.className = "gantt-row header-row";
+
+      const taskHeader = document.createElement("div");
+      taskHeader.className = "task-column";
+      taskHeader.innerHTML = `<div class="task-header-box">TAREAS</div>`;
+      headerRow.appendChild(taskHeader);
+
+      const timelineHeader = document.createElement("div");
+      timelineHeader.className = "timeline-column";
+
+      GANTT_CONFIG.months.forEach(month => {
+        const monthPill = document.createElement("div");
+        monthPill.className = `month-header-pill ${month.style}`;
+        monthPill.textContent = month.name;
+        timelineHeader.appendChild(monthPill);
+      });
+
+      headerRow.appendChild(timelineHeader);
+      root.appendChild(headerRow);
+
+      // 2. FILAS DE LAS 7 ACTIVIDADES
+      GANTT_CONFIG.tasks.forEach(task => {
+        const row = document.createElement("div");
+        row.className = "gantt-row";
+
+        // Columna de título de tarea
+        const taskCol = document.createElement("div");
+        taskCol.className = "task-column";
+        taskCol.innerHTML = `
+          <div class="task-card" data-task-id="${task.id}">
+            <span>${task.name}</span>
+          </div>
+        `;
+        row.appendChild(taskCol);
+
+        // Columna de cápsulas temporales
+        const timelineCol = document.createElement("div");
+        timelineCol.className = "timeline-column";
+
+        let globalColIndex = 0;
+
+        GANTT_CONFIG.months.forEach((month, mIdx) => {
+          const monthGroup = document.createElement("div");
+          monthGroup.className = "month-capsule-group";
+
+          month.weeks.forEach((weekRange, wIdx) => {
+            const capsule = document.createElement("div");
+            const isActive = task.activeColumns.includes(globalColIndex);
+            
+            capsule.className = `capsule ${isActive ? task.activeClass : ""}`;
+            capsule.setAttribute("data-task-name", task.name.replace("<br>", " "));
+            capsule.setAttribute("data-task-dates", `${task.startDate} al ${task.endDate}`);
+            capsule.setAttribute("data-month", month.name);
+            capsule.setAttribute("data-week", `Semana ${wIdx + 1} (${weekRange})`);
+            capsule.setAttribute("data-is-active", isActive);
+
+            // Eventos interactivos para el tooltip
+            capsule.addEventListener("mouseenter", showTooltip);
+            capsule.addEventListener("mousemove", moveTooltip);
+            capsule.addEventListener("mouseleave", hideTooltip);
+
+            monthGroup.appendChild(capsule);
+            globalColIndex++;
+          });
+
+          timelineCol.appendChild(monthGroup);
+        });
+
+        row.appendChild(timelineCol);
+        root.appendChild(row);
+      });
+    }
+
+    /**
+     * Gestión del tooltip interactivo flotante
+     */
+    const tooltip = document.getElementById("tooltip");
+
+    function showTooltip(e) {
+      const cap = e.currentTarget;
+      const isActive = cap.getAttribute("data-is-active") === "true";
+      const taskName = cap.getAttribute("data-task-name");
+      const taskDates = cap.getAttribute("data-task-dates");
+      const month = cap.getAttribute("data-month");
+      const week = cap.getAttribute("data-week");
+
+      let content = "";
+      if (isActive) {
+        content = `
+          <div class="tt-phase">● ${taskName}</div>
+          <div class="tt-dates">Período general: ${taskDates}</div>
+          <div class="tt-segment">Segmento activo: ${month} — ${week}</div>
+        `;
+      } else {
+        content = `
+          <div style="font-weight:700; color:#cbd5e1;">${month} — ${week}</div>
+          <div style="color:#94a3b8; font-size:11px;">(Sin actividad programada)</div>
+        `;
+      }
+
+      tooltip.innerHTML = content;
+      tooltip.style.display = "block";
+      moveTooltip(e);
+    }
+
+    function moveTooltip(e) {
+      const xOffset = 14;
+      const yOffset = 14;
+      let left = e.pageX + xOffset;
+      let top = e.pageY + yOffset;
+
+      if (left + 260 > window.innerWidth) {
+        left = e.pageX - 270;
+      }
+
+      tooltip.style.left = left + "px";
+      tooltip.style.top = top + "px";
+    }
+
+    function hideTooltip() {
+      tooltip.style.display = "none";
+    }
+
+    /**
+     * Alternar pantalla completa para la presentación
+     */
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.log(`Error al activar pantalla completa: ${err.message}`);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Tecla rápida 'F' para alternar pantalla completa durante la defensa
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "f" || e.key === "F") {
+        toggleFullScreen();
+      }
+    });
+
+    // Iniciar renderizado al cargar el documento
+    document.addEventListener("DOMContentLoaded", renderGantt);
+  </script>
+</body>
+</html>

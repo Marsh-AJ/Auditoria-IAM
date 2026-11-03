@@ -1,6 +1,7 @@
 """
 Página de Configuración para el Sistema de Auditoría IAM.
 Presenta las secciones visuales de configuración sin exponer credenciales ni mutar .env.
+Diseño empresarial, sobrio, minimalista con geometría recta y esquinas cuadradas.
 """
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -31,18 +32,19 @@ class SettingsPage(QWidget):
         scroll_area.setFrameShape(QFrame.NoFrame)
 
         content_widget = QWidget()
+        content_widget.setStyleSheet("background-color: #F3F6FA;")
         layout = QVBoxLayout(content_widget)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(24)
+        layout.setContentsMargins(32, 28, 32, 32)
+        layout.setSpacing(20)
 
         # 1. Encabezado de la página
         title = QLabel("Configuración del Sistema")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #f8fafc;")
+        title.setStyleSheet("font-size: 23px; font-weight: 700; color: #172B46;")
 
         subtitle = QLabel(
             "Parámetros operativos de evaluación y preferencias de ejecución de auditorías IAM."
         )
-        subtitle.setStyleSheet("font-size: 13px; color: #94a3b8;")
+        subtitle.setStyleSheet("font-size: 13px; color: #64748B;")
 
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -50,7 +52,8 @@ class SettingsPage(QWidget):
         # Banner de advertencia de seguridad / alcance
         banner = QFrame()
         banner.setStyleSheet(
-            "background-color: #1e293b; border-left: 4px solid #38bdf8; border-radius: 6px; padding: 12px;"
+            "background-color: #FFFFFF; border: 1px solid #E2E8F0; border-left: 4px solid #294F78; "
+            "border-radius: 6px; padding: 12px;"
         )
         b_layout = QVBoxLayout(banner)
         b_text = QLabel(
@@ -58,7 +61,7 @@ class SettingsPage(QWidget):
             "y no modifican el archivo .env, la base de datos ni credenciales del sistema."
         )
         b_text.setWordWrap(True)
-        b_text.setStyleSheet("color: #cbd5e1; font-size: 12px; line-height: 1.4;")
+        b_text.setStyleSheet("color: #1E293B; font-size: 12px; line-height: 1.4;")
         b_layout.addWidget(b_text)
         layout.addWidget(banner)
 
@@ -68,14 +71,18 @@ class SettingsPage(QWidget):
             description="Configuración de la fuente predeterminada para nuevas sesiones de auditoría."
         )
         sg_layout = QVBoxLayout(source_group)
+        sg_layout.setSpacing(8)
 
         source_combo = QComboBox()
         source_combo.addItem("Simulador de Datos Local (Recomendado para pruebas)", "simulador")
         source_combo.addItem("Adaptador AWS IAM (Boto3)", "aws")
         source_combo.setStyleSheet(
-            "background-color: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #f8fafc;"
+            "background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; "
+            "padding: 8px 12px; color: #172B46; font-size: 13px;"
         )
-        sg_layout.addWidget(QLabel("Fuente primaria de auditoría:"))
+        lbl_source = QLabel("Fuente primaria de auditoría:")
+        lbl_source.setStyleSheet("color: #172B46; font-size: 13px; font-weight: 500;")
+        sg_layout.addWidget(lbl_source)
         sg_layout.addWidget(source_combo)
         layout.addWidget(source_group)
 
@@ -87,18 +94,31 @@ class SettingsPage(QWidget):
         gg_layout = QGridLayout(general_group)
         gg_layout.setSpacing(12)
 
-        gg_layout.addWidget(QLabel("Umbral de inactividad de credenciales (Control 5.16):"), 0, 0)
+        lbl_inact = QLabel("Umbral de inactividad de credenciales (Control 5.16):")
+        lbl_inact.setStyleSheet("color: #172B46; font-size: 13px;")
+        gg_layout.addWidget(lbl_inact, 0, 0)
+
         inactivity_input = QLineEdit("90")
         inactivity_input.setReadOnly(True)
         inactivity_input.setStyleSheet(
-            "background-color: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #94a3b8; max-width: 80px;"
+            "background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; "
+            "padding: 6px 12px; color: #172B46; max-width: 80px; font-weight: 600;"
         )
         gg_layout.addWidget(inactivity_input, 0, 1)
-        gg_layout.addWidget(QLabel("días (parámetro definido para el prototipo)"), 0, 2)
 
-        gg_layout.addWidget(QLabel("Nivel de severidad para permisos irrestrictos (Control 5.18):"), 1, 0)
+        lbl_days = QLabel("días (parámetro definido para el prototipo)")
+        lbl_days.setStyleSheet("color: #64748B; font-size: 12px;")
+        gg_layout.addWidget(lbl_days, 0, 2)
+
+        lbl_sev = QLabel("Nivel de severidad para permisos irrestrictos (Control 5.18):")
+        lbl_sev.setStyleSheet("color: #172B46; font-size: 13px;")
+        gg_layout.addWidget(lbl_sev, 1, 0)
+
         severity_label = QLabel("CRÍTICA")
-        severity_label.setStyleSheet("color: #f43f5e; font-weight: bold;")
+        severity_label.setStyleSheet(
+            "color: #D64545; background-color: #FEF2F2; border: 1px solid #FECACA; "
+            "border-radius: 4px; padding: 2px 8px; font-weight: 700; font-size: 12px;"
+        )
         gg_layout.addWidget(severity_label, 1, 1)
 
         layout.addWidget(general_group)
@@ -114,12 +134,12 @@ class SettingsPage(QWidget):
         chk_stop = QCheckBox("Detener ejecución ante errores no recuperables de fuente")
         chk_stop.setChecked(True)
         chk_stop.setEnabled(False)
-        chk_stop.setStyleSheet("color: #cbd5e1;")
+        chk_stop.setStyleSheet("color: #1E293B; font-size: 13px;")
 
         chk_readonly = QCheckBox("Modo estricto de solo lectura forzado (Garantía de no modificación en nube/BD)")
         chk_readonly.setChecked(True)
         chk_readonly.setEnabled(False)
-        chk_readonly.setStyleSheet("color: #10b981; font-weight: 500;")
+        chk_readonly.setStyleSheet("color: #16845B; font-weight: 600; font-size: 13px;")
 
         eg_layout.addWidget(chk_stop)
         eg_layout.addWidget(chk_readonly)
@@ -134,27 +154,25 @@ class SettingsPage(QWidget):
         main_layout.addWidget(scroll_area)
 
     def _create_section_card(self, title: str, description: str) -> QFrame:
-        """Crea un contenedor tipo tarjeta con encabezado y descripción formal."""
+        """Crea un contenedor tipo sección plana con encabezado y descripción formal."""
         card = QFrame()
         card.setProperty("class", "card")
         card.setStyleSheet(
-            "background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px;"
+            "background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 20px;"
         )
         header_layout = QVBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 12)
-        header_layout.setSpacing(4)
+        header_layout.setContentsMargins(0, 0, 0, 10)
+        header_layout.setSpacing(3)
 
         lbl_title = QLabel(title)
-        lbl_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #38bdf8;")
+        lbl_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #172B46;")
 
         lbl_desc = QLabel(description)
-        lbl_desc.setStyleSheet("font-size: 12px; color: #94a3b8;")
+        lbl_desc.setStyleSheet("font-size: 12px; color: #64748B;")
 
         header_layout.addWidget(lbl_title)
         header_layout.addWidget(lbl_desc)
 
-        # Se inserta el layout de encabezado como primer hijo del layout principal de la tarjeta al inicializar
         card_main_layout = QVBoxLayout(card)
         card_main_layout.addLayout(header_layout)
         return card
-

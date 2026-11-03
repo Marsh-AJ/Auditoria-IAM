@@ -10,4 +10,8 @@ reports/*
 data/*
 !data/.gitkeep
 
-#hola jajajaajajja
+# Archivos generados y paquetes
+*.zip
+.pytest_cache/
+*.egg-info/
+
